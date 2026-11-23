@@ -1,0 +1,376 @@
+# How to host a CLAP plugin natively (input for T24: CLAP hosting through composerd, native first).
+# Facts from the public CLAP headers (MIT), plus wclap-cpp (MIT) for the wasm angle. Described in our words.
+# Paths in src: are relative to <reference checkout>. clap = <reference checkout>/clap (HEAD a47f6badb49d948fd009998f28309cdab78979c9,
+# header version 1.2.10, clap/include/clap/version.h:23-25). Line numbers are in the header files listed.
+# Items marked "our proposal" are design advice from the scout, not facts from the headers. Related: notes/ref-webclap.yaml.
+
+meta:
+  license:
+    value: MIT
+    src: [clap/LICENSE:1-3]
+  nature: "Headers with long doc comments. There is no reference host in the clone (clap/src holds only plugin templates). Every rule below is a contract written for plugin and host authors, not tested behavior."
+  src_templates: [clap/src/plugin-template.c, clap/src/main.c]
+
+# ---------------------------------------------------------------- scan
+
+scan:
+  search_paths:
+    fact: "Standard folders per OS: Linux user .clap and /usr/lib/clap; Windows common program files CLAP and local app data CLAP; macOS system and user Audio Plug-Ins CLAP. A host must also read a CLAP_PATH environment variable, formatted like the OS executable search path (colon on Unix, semicolon on Windows). Each folder is searched recursively for files (or bundles on macOS) ending in .clap."
+    src: [clap/include/clap/entry.h:12-32]
+    tags: [borrow]
+    note: "Make the list configurable and add a project-local folder. Paths in config, not hardcoded."
+  entry_symbol:
+    fact: "Each .clap file is a dynamic library exporting one data symbol, the entry struct, that holds the clap version, init, deinit and get_factory."
+    src: [clap/include/clap/entry.h:61-132]
+    tags: [borrow]
+  scan_sequence:
+    fact: "Load the library, check the entry version is compatible (major version at least 1; 0.x was development), call init with the library path (the folder or bundle path on macOS), ask get_factory for the plugin catalogue id, read count and each descriptor, copy what you need, then deinit and unload if you want a quick scan. Load again later when a plugin is actually needed."
+    src: [clap/include/clap/entry.h:61-100, clap/include/clap/version.h:38-42, clap/include/clap/factory/plugin-factory.h:7-28]
+    tags: [borrow]
+  init_rules:
+    - fact: "init must be fast and must not show UI or ask the user anything. Heavy work should be cached by the plugin."
+      src: [clap/include/clap/entry.h:78-85]
+    - fact: "If init returns false the library is considered uninitialised: do not call deinit or any other symbol from it."
+      src: [clap/include/clap/entry.h:87-89]
+    - fact: "init and deinit must be called in matched pairs, once each in the normal case. Since 1.2.0 plugins must survive repeated calls, but the host should still do its best to call once. They may run on any thread, never concurrently with each other or with ANY other call into that library."
+      src: [clap/include/clap/entry.h:34-60, clap/include/clap/entry.h:95-99, clap/include/clap/entry.h:113-117]
+    - fact: "get_factory is the one entry function that may run on several threads at once."
+      src: [clap/include/clap/entry.h:125-128]
+  tags_init: [borrow]
+  descriptor:
+    fact: "A descriptor has id (reverse domain style, must be unique and stable), name, vendor, urls, version string, description and a null terminated list of feature strings. Only id and name are mandatory. It stays valid only until the library's deinit, so copy it. Standard features include instrument, audio-effect, note-effect, note-detector and analyzer; custom ones use a namespace prefix."
+    src: [clap/include/clap/plugin.h:12-39, clap/include/clap/factory/plugin-factory.h:23-28, clap/include/clap/plugin-features.h:1-27]
+    tags: [borrow]
+    note: "A scan result record for composerd: library path, file mtime and size, plugin id, name, vendor, version, features, scanned-with clap version."
+  factory_thread_rule: "Every plugin factory method is declared thread safe, and scanning must be as quick as possible."
+  src_factory_rule: [clap/include/clap/factory/plugin-factory.h:13-17]
+  invalidation:
+    fact: "A draft factory lets a library that scans sub-plugins itself (a single file exposing many plugins) report extra folders and file globs to watch, and a refresh call that says whether a reload is needed."
+    src: [clap/include/clap/factory/draft/plugin-invalidation.h:1-47]
+    tags: [rethink]
+    note: "Draft. Support is a later nicety; rescan on library mtime change is enough first."
+  crash_isolation:
+    fact: "Nothing in the headers protects the host from a plugin that crashes or hangs in init, get_factory or descriptor reads. Scanning is native code from third parties."
+    tags: [rethink]
+    our_proposal: "Scan in a separate child process with a timeout, one library per call, results returned as data and cached. A crash marks that file bad and skips it next time until its mtime changes. Same child process pattern can later host a risky plugin during render."
+    src: [clap/include/clap/entry.h:78-89]
+
+# ---------------------------------------------------------------- lifecycle
+
+lifecycle:
+  create:
+    fact: "Create by id through the factory, passing the host handle. The host handle must stay valid until after destroy. Inside create the plugin may NOT call any host callback. The returned plugin is owned until destroy is called on it."
+    src: [clap/include/clap/factory/plugin-factory.h:30-38]
+    tags: [borrow]
+  host_handle:
+    fact: "The host handle carries the clap version, a private pointer for the host, mandatory name and version strings, vendor and url, and four entry points: get_extension, request_restart, request_process, request_callback. get_extension returns null for anything unsupported, is thread safe, must not be called before the plugin's init, and its results stay valid until after destroy."
+    src: [clap/include/clap/host.h:9-47]
+    tags: [borrow]
+    our_proposal: "One host handle per plugin instance, with the private pointer pointing to our per-instance record. That lets the thread-safe callbacks find the right instance without global lookups."
+  init_then_state_machine:
+    fact: "After create comes init (main thread). Only now are host extensions available. If init fails the host destroys the plugin. After init the plugin is inactive. Then: activate (main thread, not active), start_processing (audio thread), repeated process (audio thread), stop_processing, deactivate (main thread), and finally destroy (main thread, must be inactive). reset (audio thread, active) clears all voices and filters, keeps parameter values, and steady time may jump backward."
+    src: [clap/include/clap/plugin.h:41-90]
+    tags: [borrow]
+  activate:
+    fact: "Activate gives a constant sample rate and a frame range min to max (both at least 1, at most INT32_MAX). The plugin allocates here. After activation the latency and port configuration cannot change until deactivation. Process blocks must stay inside the range."
+    src: [clap/include/clap/plugin.h:60-71]
+    tags: [borrow]
+    our_proposal: "Offline render: activate with min 1 and max equal to the engine block size (from config), keep it fixed for the whole render so results are repeatable. Never change block size mid render."
+  extension_query:
+    fact: "get_extension on the plugin is thread safe, forbidden before init, and returned structs live until destroy. Cache them per instance after init."
+    src: [clap/include/clap/plugin.h:99-104]
+    tags: [borrow]
+  restart_and_process_requests:
+    fact: "request_restart asks the host to deactivate then reactivate, and may be delayed. request_process asks the host to start processing a plugin that went to sleep (external IO). Both are thread safe."
+    src: [clap/include/clap/host.h:27-35]
+    tags: [borrow]
+    our_proposal: "Treat both as flags set from any thread, consumed by the control thread at the next safe point between render blocks. Restart sequence: stop_processing, deactivate, re-read ports and latency, activate, start_processing, then tell the engine to adjust delay compensation."
+  main_thread_callback:
+    fact: "request_callback asks for the plugin's on_main_thread to be called on the main thread soon, typically within about 33 ms. Plugins must not rely on exact timing and the call can be late when the host is busy."
+    src: [clap/include/clap/host.h:37-46, clap/include/clap/plugin.h:106-109]
+    tags: [borrow]
+  failure_modes:
+    - "A false return from init, activate or start_processing is a plain failure: destroy or leave inactive, report to the caller, mark the instance failed."
+    - "A process status of error means the output buffer must be discarded."
+    - "Never call destroy while active, never call audio thread functions without start_processing, never call two audio thread functions on one instance at once."
+  src_failure: [clap/include/clap/plugin.h:46-58, clap/include/clap/plugin.h:75-78, clap/include/clap/process.h:10-12]
+  tags_failure: [borrow]
+
+# ---------------------------------------------------------------- threads
+
+threads:
+  main_thread:
+    fact: "One OS thread for the lifetime of a plugin instance. Used for most host-plugin interaction. On macOS and Windows it must be the real GUI thread when a GUI or timers are involved. It is not realtime but must answer fast enough for the UI. Plugins are told to push slow work to their own background threads."
+    src: [clap/include/clap/ext/thread-check.h:11-23]
+    tags: [borrow]
+  audio_thread:
+    fact: "A symbolic role, not one fixed OS thread. The host may move it between OS threads (even use its main thread) as long as only one thread holds the role per plugin instance at a time. All functions tagged audio thread are therefore serial. They must follow realtime rules: no allocation, no contended locks, no IO, no waiting."
+    src: [clap/include/clap/ext/thread-check.h:25-40]
+    tags: [borrow]
+  realtime_vs_offline:
+    fact: "If a plugin does not implement the render extension, all its audio thread functions must meet realtime rules. A plugin that has a hard realtime requirement must be run in realtime. The render extension lets the host set realtime or offline mode, and offline may use costlier algorithms. A host that cannot meet realtime for host-provided audio thread functions should not process plugins that insist on it."
+    src: [clap/include/clap/ext/thread-check.h:42-51, clap/include/clap/ext/render.h:11-35]
+    tags: [borrow]
+    unverified_detail: "The header does not say at which lifecycle point set may be called. Do it while inactive, before activate, and check the return value."
+  thread_safe_tag: "Functions marked thread safe can be called from any thread, even concurrently, unless marked otherwise (for example not on the audio thread)."
+  src_thread_safe: [clap/include/clap/ext/thread-check.h:64-66]
+  background_thread: "Reserved for a few draft extensions with explicit rules (background activation, state, progress). Not needed for a first host."
+  src_background: [clap/include/clap/ext/thread-check.h:53-62, clap/ChangeLog.md:13-17]
+  host_thread_check:
+    fact: "The host is strongly encouraged to implement the thread-check host extension: two queries (is this the main thread, is this an audio thread) that plugins use for runtime assertions."
+    src: [clap/include/clap/ext/thread-check.h:68-79]
+    tags: [borrow]
+  thread_pool:
+    fact: "Optional host extension that runs N plugin tasks on the host pool and blocks until all are done. It may only be requested from within process and not concurrently. The host should reject calls outside process, and should simply not offer it under hard realtime pressure. Plugin falls back to a loop when it is absent."
+    src: [clap/include/clap/ext/thread-pool.h:5-66]
+    tags: [rethink]
+    our_proposal: "Do not offer it in v1: determinism and simplicity first. Plugins must cope with null."
+  our_proposal_mapping:
+    - "control thread: one dedicated thread inside composerd (or one per plugin sandbox process) that owns every main-thread call for a plugin instance, serialised through a queue. It is not the process main thread, so no GUI is possible on it. Plugins that need GUI event loops or timers are out of scope for headless hosting."
+    - "render thread: whichever thread runs the engine block loop. Document that it is one thread at a time per instance."
+    - "Commands from the command API (set param, save state) are queued to the control thread, never run on the render thread."
+  tags_proposal: [rethink]
+
+# ---------------------------------------------------------------- process
+
+process_call:
+  fields:
+    fact: "Per block the host fills: steady time (counter in samples, or -1 if unavailable; if set it must grow by at least the frame count each call), frame count, transport (null means free running with no transport events), arrays of input and output audio buffers with counts, an input event list and an output event list."
+    src: [clap/include/clap/process.h:30-62]
+    tags: [borrow]
+  lifetimes: "Every pointer in the process struct and what it points to is valid only until process returns. Inputs are read only."
+  src_lifetimes: [clap/include/clap/plugin.h:92-97, clap/include/clap/process.h:47-52]
+  audio_buffer:
+    fact: "Each buffer has either 32-bit or 64-bit channel pointer arrays (exactly one set), a channel count, a latency field and a 64-bit constant mask. A set bit means that channel is one constant value stored in sample 0 (hint, readers need not check, but then the data must be filled anyway). Number of buffers must match the plugin's audio port count and map by index. 32-bit audio is required of hosts and plugins, 64-bit is optional per port."
+    src: [clap/include/clap/audio-buffer.h:9-33, clap/include/clap/process.h:47-54, clap/include/clap/ext/audio-ports.h:6-14]
+    tags: [borrow]
+  audio_ports:
+    fact: "Ports are described by stable id, name, flags (main, supports 64-bit, prefers 64-bit, requires common sample size), channel count, a port type string (mono, stereo, others via extensions) and an in-place partner id. Main port must be index 0 and there is at most one main input and one main output. Ports change only while inactive. If the plugin has no audio ports extension it has no audio."
+    src: [clap/include/clap/ext/audio-ports.h:16-80]
+    tags: [borrow]
+    our_proposal: "Read ports after init and again after every activate. Allocate engine buffers per port. Use in-place only when the pair is declared."
+  note_ports:
+    fact: "Note ports are likewise stable, inactive-only, and list a supported dialect bitfield (native clap notes, MIDI 1, MIDI with MPE, MIDI 2) and a preferred dialect. The host says which dialects it can send (a host extension query). No extension means no note IO."
+    src: [clap/include/clap/ext/note-ports.h:6-75]
+    tags: [borrow]
+    our_proposal: "Send native clap note events when supported, MIDI otherwise. Never send the same note in two encodings."
+  status_codes:
+    fact: "Return values: error (discard output), continue, continue if output not quiet, tail (ask the tail extension how long it rings), sleep (nothing more to do until an event or changed audio input). Tail value of INT32_MAX or more means infinite."
+    src: [clap/include/clap/process.h:10-27, clap/include/clap/ext/tail.h:11-16]
+    tags: [borrow]
+    our_proposal: "For offline render keep calling every block while notes or tail are live. The stop condition for a render is: all source regions ended, then tail length (or silence over a config threshold for a config number of blocks) reached. Do not skip blocks just because of sleep unless a benchmark shows it matters."
+  latency:
+    fact: "Plugin latency in samples is read through a latency extension, valid while activating or active, and may only change at activation. A changed latency during active use needs request_restart. The buffer struct also carries a latency field for audio interface latency."
+    src: [clap/include/clap/ext/latency.h:11-23, clap/include/clap/audio-buffer.h:31]
+    tags: [borrow]
+    our_proposal: "Engine delay compensation reads latency right after activate and applies it to the track chain. Latency change invalidates the compensation plan and re-triggers it."
+
+# ---------------------------------------------------------------- events
+
+events:
+  envelope:
+    fact: "Every event begins with a header: total byte size, time as a sample offset inside the block, a space id (0 for core events), a type id and flags. Events are flat memory that can be copied by size bytes. A host that meets an unknown space or type can skip by the size field."
+    src: [clap/include/clap/events.h:11-39]
+    tags: [borrow]
+  ordering:
+    fact: "The host must deliver input events in sample time order. The plugin must push output events in sample time order. Neither header names a tie rule for equal times; the examples keep submission order, and a note expression at the same sample as a note on applies to the voice from its first sample."
+    src: [clap/include/clap/process.h:56-61, clap/include/clap/events.h:78-90, clap/include/clap/events.h:182-186, clap/include/clap/events.h:344-363]
+    tags: [borrow]
+    our_proposal: "Sort key is (time, sequence). Sequence is assigned when the engine emits the event: note off before note on at one tick, note on before its expressions, param value before the note it affects. Never reverse equal-time groups. See the reverse drain bug in ref-webclap.yaml (event_ordering_check)."
+  list_interfaces:
+    fact: "Input list is read through size and get by index (do not free). Output list is written through try_push which copies the event and returns false if it could not store it (for example out of memory). Sysex events hold a pointer to external data, valid for the process call only (host to plugin) or the try_push call (plugin to host); copy the payload, not just the pointer."
+    src: [clap/include/clap/events.h:311-363]
+    tags: [borrow]
+    our_proposal: "Per instance, preallocate a block event arena sized from config. If try_push cannot store, return false and count the drop in a per instance diagnostic."
+  note_events:
+    fact: "Note on, off, choke (host to plugin, like a drum choke or panic) and end (plugin to host, says a voice finished). Notes are addressed by port, channel, key and note id; -1 is a wildcard in any slot. Note on needs port, channel and key at least 0; a host without note ids sends -1. A note on with velocity 0 is still a note on, not an off. The plugin should be able to handle MIDI encoded notes or reject them via an event filter."
+    src: [clap/include/clap/events.h:41-170]
+    tags: [borrow]
+    our_proposal: "Always give each note a unique note id from the engine, so overlapping equal pitch notes work. Send a choke on transport stop and a panic."
+  note_expression:
+    fact: "Note expressions (volume, pan, tuning in semitones, vibrato, expression, brightness, pressure) set values, not increments, addressed with the same wildcard rules."
+    src: [clap/include/clap/events.h:172-220]
+    tags: [borrow]
+  param_events:
+    fact: "Parameter value sets the parameter, parameter mod sets a modulation amount, and the audible value is the sum. Per-note addressing via note id, port, channel, key. Gesture begin and end events bracket user knob moves. Flags: live (a human action) and do not record (for example a parameter moved by a MIDI controller)."
+    src: [clap/include/clap/events.h:29-39, clap/include/clap/events.h:100-116, clap/include/clap/events.h:222-261]
+    tags: [borrow]
+  param_cookie:
+    fact: "Param events carry the plugin supplied cookie from the info call, or null. The plugin must handle null. Cookies are void after a full rescan and at destroy."
+    src: [clap/include/clap/ext/params.h:217-242]
+    tags: [borrow]
+    our_proposal: "Send the cookie we got from get_info, drop all cookies on full rescan."
+  transport:
+    fact: "Transport is given at block start in the process struct, and sample accurate changes (tempo ramps) arrive as transport events. Fields: flags (tempo, beats timeline, seconds timeline, time signature, playing, recording, loop, pre-roll), position in beats and seconds (fixed point types), tempo and per-sample tempo increment, loop bounds, bar start and number, time signature."
+    src: [clap/include/clap/events.h:263-302, clap/include/clap/process.h:43-45]
+    tags: [borrow]
+    note: "Fixed point beat and second types are in clap/include/clap/fixedpoint.h."
+  tags_default: [borrow]
+
+# ---------------------------------------------------------------- params
+
+params:
+  discovery:
+    fact: "Through the params extension, on the main thread: count, info by index, current value by id, value to text, text to value. Info has stable id, flags, cookie, display name (not unique), module path with slash separators, min, max, default (min and max finite, default inside the range)."
+    src: [clap/include/clap/ext/params.h:210-293]
+    tags: [borrow]
+  flags_that_matter:
+    - "stepped: integer valued, convert by truncation. Enum implies stepped and must have non-blank text for every value."
+    - "hidden, read only, bypass (at most one, values 0 or 1; its value does not change whether process is called), automatable, modulatable, per note, key, channel or port variants, requires process (changes must go through process while active)."
+    - "periodic."
+  src_flags: [clap/include/clap/ext/params.h:133-207]
+  tags_flags: [borrow]
+  value_space: "Params are in plain values (real units), not 0..1. Store plain values in project data and automation, store modulation as plain deltas."
+  src_value_space: [clap/include/clap/ext/params.h:83-115]
+  tags_value_space: [borrow]
+  setting_from_host:
+    fact: "Two mutually exclusive paths: send events inside process, or call flush when the plugin is not processing. Flush runs on the audio thread when active and the main thread otherwise, must not overlap process, and loses sample offsets. If the plugin is processing, process already performs the param update and flush is not needed."
+    src: [clap/include/clap/ext/params.h:14-20, clap/include/clap/ext/params.h:295-306]
+    tags: [borrow]
+    our_proposal: "While the render engine runs, push timestamped param events into the block event list. When idle (stopped transport, no render), call flush on the control thread so the value is readable immediately through get value."
+  plugin_originated_changes:
+    fact: "When the plugin changes a value itself (own GUI, internal MIDI mapping) it reports it through param value output events during process or flush, with gesture brackets for user moves. A plugin wanting a flush calls the host's request flush (safe from any thread but the audio thread) and the host then schedules a process or flush call."
+    src: [clap/include/clap/ext/params.h:22-26, clap/include/clap/ext/params.h:54-61, clap/include/clap/ext/params.h:371-381]
+    tags: [borrow]
+    our_proposal: "Turn plugin-originated output param events into commands on our command API (so an AI or script sees them), marked not-recorded when the flag says so."
+  rescan_rules:
+    fact: "Host side rescan (main thread) with flags: values changed, text changed, info changed (take effect now), all (invalidates everything, only while inactive, otherwise ask for a restart and wait for deactivate). Adding or removing params, or changing min, max, cookie, stepped, bypass, modulatable or per-note flags requires the all form. When ids were removed or reused the plugin asks the host to clear references to that id."
+    src: [clap/include/clap/ext/params.h:309-347, clap/include/clap/ext/params.h:70-77, clap/include/clap/ext/params.h:362-370]
+    tags: [borrow]
+  persistence:
+    fact: "Parameters are saved and restored through the plugin's state extension. A host must NOT build its own parameter save and restore fallback for plugins without state."
+    src: [clap/include/clap/ext/params.h:101-115]
+    tags: [borrow]
+    note: "For a plugin without state, its params are not persisted at all by the spec. Decision for us: still store the automation lanes we own in our project file, but not a snapshot that pretends to be the plugin state. Mark in project data."
+  param_conflict_midi_cc: "Param events caused by a MIDI controller carry the do not record flag so the host does not record both the controller and the parameter."
+  src_cc: [clap/include/clap/ext/params.h:28-36]
+  tags_cc: [borrow]
+
+# ---------------------------------------------------------------- state
+
+state:
+  save_load:
+    fact: "Save and load use host provided stream objects, on the main thread, and return true on success. Streams may move fewer bytes than asked, so loop. Read returns zero at end of data and negative for errors; write returns negative on error."
+    src: [clap/include/clap/ext/state.h:24-34, clap/include/clap/stream.h:6-34]
+    tags: [borrow]
+    our_proposal: "Our stream is a growable byte buffer for save and a cursor over a byte slice for load. For load, optionally cap the chunk per read call from config in tests to catch plugins that assume full reads."
+  what_it_covers: "State covers parameter values and any non-parameter data. Used for project reload, duplication and presets."
+  src_covers: [clap/include/clap/ext/state.h:6-16]
+  dirty_flag:
+    fact: "Host extension mark_dirty tells the host the state changed and needs saving. A parameter change implies dirty."
+    src: [clap/include/clap/ext/state.h:36-41]
+    tags: [borrow]
+  contexts:
+    fact: "An optional second extension (id state-context/2) saves and loads with a context: preset, duplicate, or project. Plugin may then drop device-bound data in presets. Its blob must also load via the plain state load, and the plain and context variants must be equivalent. A plugin offering context must also offer plain state. When unsure, use plain state."
+    src: [clap/include/clap/ext/state-context.h:6-46]
+    tags: [rethink]
+    our_proposal: "v1: plain state only for project save. Duplicate track: save plain, load plain in the new instance. Add context later."
+  load_timing:
+    fact: "Loading a preset can add or remove params or change latency and ports. The plugin should apply breaking changes only after the host deactivates it, otherwise right away, and it informs the host with param rescan and latency changed."
+    src: [clap/include/clap/ext/params.h:38-50]
+    tags: [borrow]
+    unverified_detail: "The state header does not say if load is allowed while active. Safest plan for project open: create, init, load state while inactive, then read params and ports, then activate."
+  persistence_record:
+    our_proposal: "Per plugin instance in the project file: plugin id, clap version at save time, library path hint, state bytes (opaque) with a content hash, plus our own track binding. Never parse state bytes."
+    tags: [borrow]
+
+# ---------------------------------------------------------------- host extensions
+
+minimum_host_extensions:
+  note: "Our proposal for a headless host, based on what the headers define. Anything we do not offer is returned as null from get_extension and plugins must cope."
+  must_offer: ["log (thread safe, severities include host and plugin misbehaving markers)", "thread-check", "params (rescan, clear, request flush)", "state (mark dirty)", "latency (changed)", "audio-ports (is rescan flag supported, rescan)", "note-ports (supported dialects, rescan)"]
+  nice_to_offer: ["tail (changed, called on the audio thread)", "render (we call the plugin side)", "audio-ports-activation", "voice-info", "note-name", "track-info"]
+  decline: ["gui, timer-support, posix-fd-support, context-menu, webview (need a window or event loop)", "thread-pool (see threads)"]
+  src: [clap/include/clap/ext/log.h:1-30, clap/include/clap/ext/thread-check.h:68-79, clap/include/clap/ext/params.h:362-382, clap/include/clap/ext/state.h:36-41, clap/include/clap/ext/latency.h:17-23, clap/include/clap/ext/audio-ports.h:102-112, clap/include/clap/ext/note-ports.h:67-75, clap/include/clap/ext/tail.h:18-22]
+  tags: [borrow]
+  log_sink: "Plugin log messages arrive on any thread. Queue them to a lock free ring and drain on the control thread into our structured log, with the instance id. Severity set includes host-misbehaving and plugin-misbehaving, which a wrapper layer can use."
+  src_log: [clap/include/clap/ext/log.h:11-29]
+  audio_ports_rescan: "The host decides which rescan flags it allows. Names can change any time; flags, channel count, port type, in-place pair or list changes require inactive. Asking with a flag the host did not announce is illegal."
+  src_ports_rescan: [clap/include/clap/ext/audio-ports.h:82-112]
+
+# ---------------------------------------------------------------- what to avoid
+
+avoid:
+  - lesson: "Calling any host callback from inside the plugin's create, or calling get_extension before init. Plugins forbid it, and a host that tolerates it hides bugs."
+    src: [clap/include/clap/factory/plugin-factory.h:30-34, clap/include/clap/host.h:21-24]
+    tags: [avoid]
+  - lesson: "Holding descriptor pointers after deinit, or event and buffer pointers after process returns."
+    src: [clap/include/clap/factory/plugin-factory.h:25, clap/include/clap/plugin.h:93-95]
+    tags: [avoid]
+  - lesson: "Calling deinit when init returned false, or calling init and deinit concurrently with any other call into the library, from several threads."
+    src: [clap/include/clap/entry.h:87-89, clap/include/clap/entry.h:95-99]
+    tags: [avoid]
+  - lesson: "Doing audio thread work from the control thread or vice versa. Params flush picks its thread by active state."
+    src: [clap/include/clap/ext/params.h:303, clap/include/clap/ext/thread-check.h:25-40]
+    tags: [avoid]
+  - lesson: "Treating request_restart and request_process as log lines (the web test host does)."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:438-443, clap/include/clap/host.h:27-35]
+    tags: [avoid]
+  - lesson: "Reversing the order of equal time events."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:399-402]
+    tags: [avoid]
+  - lesson: "Doing allocation, file IO or locks in anything our host provides that plugins call on the audio thread (for example tail changed, thread-pool request, log from the audio thread)."
+    src: [clap/include/clap/ext/thread-check.h:42-51, clap/include/clap/ext/tail.h:18-22]
+    tags: [avoid]
+  - lesson: "Storing parameter snapshots as a substitute for plugin state, or storing knob positions instead of plain values."
+    src: [clap/include/clap/ext/params.h:101-115]
+    tags: [avoid]
+  - lesson: "Running a third party native plugin inside the daemon process without a crash plan. Our own proposal, not a spec rule."
+    src: [clap/include/clap/entry.h:78-89]
+    tags: [avoid]
+
+# ---------------------------------------------------------------- wasm link
+
+wasm_link:
+  fact: "A web plugin is the same plugin ABI inside a wasm module, so the lifecycle, event and param rules above apply unchanged. The differences are pointer width and memory ownership (see ref-webclap.yaml: module_contract, wasm_host_bridge_design). The web port reports a clap version of 1.2.7 in its headers while the clone of the CLAP repo is 1.2.10, so features added in 1.2.8 to 1.2.10 (param hovered, param origin, transport control, flush events, background operations) are not in the web layer."
+  src: [wcpp/include/wclap/_impl/wclap-defines.hpp:1-5, clap/include/clap/version.h:23-25, clap/ChangeLog.md:1-17]
+  tags: [rethink]
+
+we_call_it:
+  - their: clap_plugin_entry, .clap file
+    ours: plugin library, library entry
+  - their: plugin factory
+    ours: plugin catalogue
+  - their: plugin descriptor
+    ours: plugin listing
+  - their: clap_host
+    ours: host handle (one per plugin instance)
+  - their: main thread
+    ours: control thread
+  - their: audio thread
+    ours: render thread
+  - their: clap_process
+    ours: render block
+  - their: input events, output events
+    ours: block events in, block events out
+  - their: clap_event_note and friends
+    ours: note events
+  - their: parameter flush
+    ours: idle parameter flush
+  - their: stream (istream, ostream)
+    ours: state stream
+  - their: request_restart
+    ours: restart request
+  - their: request_callback, on_main_thread
+    ours: control thread callback request
+  - their: steady_time
+    ours: render sample counter
+  - their: constant_mask
+    ours: constant channel mask
+  - their: tail
+    ours: ring out length
+
+unverified:
+  - topic: when render mode set may be called
+    what: "render.h gives no lifecycle point for set. Plan: inactive state before activate."
+    src: [clap/include/clap/ext/render.h:26-35]
+  - topic: state load while active
+    what: "state.h does not say if load is allowed on an active plugin. Plan: load while inactive at project open."
+    src: [clap/include/clap/ext/state.h:24-34]
+  - topic: macOS and Windows library loading details
+    what: "Bundle layout on macOS (executable inside the bundle) and symbol lookup are not described in the headers beyond the path rules. Read platform docs when T24 starts."
+    src: [clap/include/clap/entry.h:93-94]
+  - topic: real world plugin quirks
+    what: "No reference host in the clone. Common misbehaviour (plugins that crash on repeated init, ignore sleep, depend on a GUI thread) needs testing against real plugins."
+  - topic: timer-support and posix-fd-support for headless plugins
+    what: "Not read. Some plugins request them even without a GUI. Check the extension headers (clap/include/clap/ext/timer-support.h, posix-fd-support.h) when a test plugin needs them."

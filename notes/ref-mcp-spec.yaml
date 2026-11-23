@@ -1,0 +1,201 @@
+# MCP specification facts used to audit mcp/composer-mcp. Task T10b, read 2026-11-23.
+# Each fact names the page it came from. Pages are under https://modelcontextprotocol.io/specification/<revision>/
+spec:
+  latest_published: "2026-07-28"
+  latest_style: "modern: stateless, no initialize handshake, per-request _meta carries protocolVersion and capabilities, server/discover is mandatory, results carry resultType"
+  latest_legacy_handshake_revision: "2025-11-25"
+  implemented_revisions: ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+  decision: "composer-mcp is a dual era server (T10c). A request whose params._meta carries io.modelcontextprotocol/protocolVersion is served statelessly under 2026-07-28; anything else follows the legacy initialize path unchanged. A modern client that probes server/discover without modern _meta gets -32601 and falls back to initialize."
+  src: basic/versioning (2026-07-28)
+
+facts:
+  lifecycle:
+    - id: init_request
+      text: "initialize carries protocolVersion, capabilities, clientInfo. The client MUST send a version it supports, SHOULD be its latest."
+      revision: "2025-11-25"
+      src: basic/lifecycle
+    - id: init_result
+      text: "Result MUST carry protocolVersion, capabilities, serverInfo (name, version, optional title, description, icons, websiteUrl) and may carry instructions."
+      revision: "2025-11-25"
+      src: basic/lifecycle and schema (InitializeResult)
+    - id: version_negotiation
+      text: "If the server supports the requested version it MUST answer with the same one. Otherwise it MUST answer with another version it supports, SHOULD be its latest. If the client cannot use it, the client SHOULD disconnect."
+      revision: "2025-11-25"
+      src: basic/lifecycle#version-negotiation
+      note: "The page also shows an example error -32602 with data.supported. That example is for a server that refuses; the normative text is the answer with another version, which is what we do."
+    - id: initialized
+      text: "After a successful initialize the client MUST send notifications/initialized. The client SHOULD NOT send requests other than ping before the initialize reply. The server SHOULD NOT send requests other than ping and logging before initialized."
+      revision: "2025-11-25"
+      src: basic/lifecycle
+    - id: ping
+      text: "ping is a request with no params. The receiver MUST answer promptly with an empty result object."
+      revision: "2025-11-25"
+      src: basic/utilities/ping
+    - id: stdio_shutdown
+      text: "Client closes the server stdin, waits, then SIGTERM, then SIGKILL. The server MAY close stdout and exit. 2026-07-28 adds: servers SHOULD exit promptly when stdin closes (primary graceful signal)."
+      revision: "2025-11-25 and 2026-07-28"
+      src: basic/lifecycle#shutdown and basic/transports/stdio (2026-07-28)
+    - id: legacy_vs_modern_probe
+      text: "A modern client probes server/discover first on stdio. Any error that is not a recognised modern error (for example -32601) marks a legacy server and the client falls back to initialize. Fallback MUST NOT key on one error code."
+      revision: "2026-07-28"
+      src: basic/transports/stdio#backward-compatibility
+    - id: modern_discover
+      text: "Modern servers MUST implement server/discover. Result: resultType complete, supportedVersions, capabilities, _meta serverInfo, optional instructions, ttlMs, cacheScope. Unsupported version is error -32022 with data.supported and data.requested."
+      revision: "2026-07-28"
+      src: server/discover and basic/versioning
+  modern_era:
+    - id: dual_era_selection
+      text: "A dual era server selects behavior from how the client opens: a request carrying modern per request _meta is served statelessly under this revision, an initialize request selects legacy semantics scoped to the stdio process. Servers MUST NOT rely on prior requests for version, capabilities or identity."
+      revision: "2026-07-28"
+      src: basic/versioning#backward-compatibility-with-initialization-based-versions, basic (Statelessness)
+    - id: meta_request_keys
+      text: "Reserved _meta keys on requests: io.modelcontextprotocol/protocolVersion (string, required), io.modelcontextprotocol/clientCapabilities (object, required), io.modelcontextprotocol/clientInfo (optional), io.modelcontextprotocol/logLevel (optional). A request missing a required field is malformed and the server MUST reject it with -32602."
+      revision: "2026-07-28"
+      src: basic (_meta, Per-request protocol fields)
+    - id: meta_response_keys
+      text: "Servers SHOULD put io.modelcontextprotocol/serverInfo (name, version) in every result _meta. It is self reported and not for security decisions."
+      revision: "2026-07-28"
+      src: basic (Per-response protocol fields)
+    - id: unsupported_version_error
+      text: "A requested version the server does not implement MUST get error -32022 with data.supported (list) and data.requested. The client picks a supported version and retries. The example lists legacy versions too; we list only the versions we serve statelessly."
+      revision: "2026-07-28"
+      src: basic/versioning#protocol-version-negotiation
+    - id: discover_shape
+      text: "server/discover takes no params beyond _meta. Result: resultType complete, supportedVersions, capabilities, _meta serverInfo (SHOULD), optional instructions, ttlMs, cacheScope. Servers MUST implement it. Calling it is optional for clients."
+      revision: "2026-07-28"
+      src: server/discover
+    - id: caching_fields
+      text: "Results of server/discover and tools/list (complete) MUST carry ttlMs (integer >= 0, 0 means immediately stale) and cacheScope (public or private; public for lists identical for all users)."
+      revision: "2026-07-28"
+      src: server/utilities/caching
+    - id: ping_removed
+      text: "ping is removed in 2026-07-28, so a modern ping is an unknown method."
+      revision: "2026-07-28"
+      src: changelog (change 5)
+    - id: modern_tool_result
+      text: "tools/call result carries resultType complete, content, optional structuredContent (any JSON value), isError. Tool execution errors stay results with isError true."
+      revision: "2026-07-28"
+      src: server/tools
+    - id: missing_capability_error
+      text: "-32021 MissingRequiredClientCapability is only for requests that need a client capability. None of our tools do, so we never emit it."
+      revision: "2026-07-28"
+      src: basic (_meta, Per-request protocol fields)
+  stdio_framing:
+    - text: "Messages are delimited by newlines and MUST NOT contain embedded newlines. UTF-8. Server MAY log to stderr. The server MUST NOT write anything to stdout that is not a valid MCP message."
+      revision: "2025-11-25 and 2026-07-28"
+      src: basic/transports (2025-11-25), basic/transports/stdio (2026-07-28)
+    - text: "2026-07-28: the server MUST NOT write JSON-RPC requests to stdout. 2025-11-25 allows server requests (sampling, roots, elicitation), which composer-mcp never sends."
+      src: basic/transports/stdio (2026-07-28)
+  jsonrpc:
+    - text: "Requests MUST include a string or integer id, unlike JSON-RPC the id MUST NOT be null. Notifications MUST NOT include an id and get no response. Error codes MUST be integers. Error responses carry the request id, except when it could not be read."
+      revision: "2025-11-25"
+      src: basic
+    - text: "Standard codes -32700 parse error, -32600 invalid request, -32601 method not found, -32602 invalid params, -32603 internal error. 2026-07-28 reserves -32020..-32099 for MCP (-32020 HeaderMismatch, -32021 MissingRequiredClientCapability, -32022 UnsupportedProtocolVersion) and forbids emitting undefined codes there."
+      revision: "2026-07-28"
+      src: basic (Error Codes)
+    - text: "Batching: 2024-11-05 none. 2025-03-26 senders MAY batch and receivers MUST support receiving batches. 2025-06-18 removed batching, and 2025-11-25 and 2026-07-28 do not mention it."
+      src: 2025-03-26/basic (Batching), 2025-06-18/changelog (major change 1)
+    - text: "Responses: result MUST be present on success. 2026-07-28 requires resultType in every result (complete or input_required); clients treat absent as complete."
+      src: basic (2026-07-28)
+  tools:
+    - id: capability
+      text: "Servers that support tools MUST declare the tools capability. listChanged says whether the server will emit notifications/tools/list_changed."
+      src: server/tools (all revisions)
+    - id: list_pagination
+      text: "tools/list takes an optional cursor and returns an optional nextCursor. Cursors are opaque strings, page size is server choice. Servers SHOULD give stable cursors and handle invalid cursors gracefully. Invalid cursors SHOULD give -32602. A missing nextCursor means the end."
+      revision: "2025-11-25"
+      src: server/utilities/pagination
+    - id: list_order
+      text: "2026-07-28: servers SHOULD return tools in a deterministic order."
+      src: server/tools (2026-07-28)
+    - id: tool_fields
+      text: "Tool: name, inputSchema required. title, description (optional in schema), icons, outputSchema, annotations, execution, _meta optional. title arrived in 2025-06-18, annotations in 2025-03-26, outputSchema in 2025-06-18, icons and execution in 2025-11-25."
+      src: server/tools, schema (Tool), changelogs of 2025-03-26, 2025-06-18, 2025-11-25
+    - id: input_schema
+      text: "inputSchema MUST be a valid JSON Schema object, never null, default dialect 2020-12. For no parameter tools use { type: object, additionalProperties: false } (recommended)."
+      revision: "2025-11-25"
+      src: server/tools#tool
+    - id: output_schema
+      text: "outputSchema is optional, root type object in the schema. If provided, the server MUST return structured results that conform to it and clients SHOULD validate. A tool that returns structuredContent SHOULD also return the serialized JSON in a TextContent block. structuredContent is an object in 2025-11-25 (2026-07-28 allows any JSON value)."
+      src: server/tools#output-schema, schema (CallToolResult)
+    - id: tool_names
+      text: "Names SHOULD be 1 to 128 characters of A-Z a-z 0-9 _ - . only, case sensitive, unique."
+      revision: "2025-11-25"
+      src: server/tools#tool-names
+    - id: call_result
+      text: "CallToolResult: content array (text, image, audio, resource_link, resource), optional structuredContent, optional isError (default false)."
+      src: schema (CallToolResult)
+    - id: errors
+      text: "Protocol errors (unknown tool, malformed request, server errors) are JSON-RPC errors, example code -32602 'Unknown tool'. Tool execution errors (API failures, input validation errors, business logic errors) are results with isError true so the model can self correct. Input validation as tool errors was made explicit in 2025-11-25 (SEP-1303); 2024-11-05 listed invalid arguments as a protocol error."
+      src: server/tools#error-handling, 2025-11-25/changelog minor change 5, 2024-11-05/server/tools
+    - id: annotations
+      text: "ToolAnnotations are hints, clients MUST treat them as untrusted. readOnlyHint default false. destructiveHint default true (meaningful only when readOnlyHint is false; false means additive updates only). idempotentHint default false (only meaningful when not read only). openWorldHint default true. title optional. Display name precedence: title, annotations.title, name."
+      revision: "2025-11-25"
+      src: schema (ToolAnnotations, Tool)
+  cancellation_progress:
+    - text: "notifications/cancelled carries requestId and optional reason. Clients MUST NOT cancel initialize. Receivers SHOULD stop work and send no response, MAY ignore unknown or finished requests. Invalid cancellations SHOULD be ignored. On stdio the client MUST send it (2026-07-28)."
+      src: basic/utilities/cancellation (2025-11-25 schema, 2026-07-28 page)
+    - text: "Progress: requester puts progressToken (string or integer) in _meta. The receiver MAY send notifications/progress (progressToken, progress that MUST increase, optional total, message) or none at all."
+      src: basic/utilities/progress
+
+audit:
+  server: mcp/composer-mcp
+  verified_against: "2025-11-25 (legacy handshake), with 2025-06-18, 2025-03-26, 2024-11-05 differences taken from their changelogs and tools pages, and 2026-07-28 read for the compatibility story"
+  kept_as_is:
+    - "Version negotiation: echo a supported version, otherwise answer with our newest (2025-11-25). Matches the normative text."
+    - "capabilities.tools.listChanged false, ping empty result, notifications never answered, unknown tool is -32602, validation failures are isError results, newline delimited stdout, logs on stderr, exit when stdin closes."
+  deviations_fixed:
+    - id: id_null_and_types
+      was: "A request with id null was answered as a normal request; bool, float, object ids were echoed."
+      spec: "id MUST be a string or integer, never null (basic)."
+      now: "-32600 with id null."
+    - id: client_response_answered
+      was: "A message with an id and no method (a client response) was answered with -32600."
+      spec: "Responses are not requests and get no reply."
+      now: "Ignored when it has result or error, -32600 otherwise."
+    - id: jsonrpc_field
+      was: "jsonrpc member was never checked."
+      spec: "All messages MUST follow JSON-RPC 2.0."
+      now: "Missing or other value is -32600."
+    - id: batch
+      was: "A JSON array line was refused as 'must be an object' for every revision."
+      spec: "2025-03-26 receivers MUST accept batches, later revisions dropped them."
+      now: "Batch is processed only after negotiating 2025-03-26 (notifications omitted, all notification batch gets no reply, empty batch -32600), other revisions get -32600."
+    - id: params_shape
+      was: "Non object params were treated as missing."
+      spec: "params is an object."
+      now: "-32602 when present and not an object (null counts as absent)."
+    - id: initialize_validation
+      was: "initialize without protocolVersion silently negotiated."
+      spec: "Client MUST send protocolVersion."
+      now: "-32602 when missing or not a string."
+    - id: tools_list_cursor
+      was: "cursor was ignored."
+      spec: "Invalid cursors SHOULD give -32602. We never issue cursors."
+      now: "Any non null cursor is -32602, result never has nextCursor."
+    - id: tools_call_params
+      was: "Missing or non string name fell through to 'unknown tool'; non object arguments became a tool error."
+      spec: "Malformed requests are protocol errors (-32602)."
+      now: "-32602 for bad name or arguments types. Unknown tool message is 'Unknown tool: <name>'."
+    - id: tool_title_output_schema
+      was: "Tools had no title and no outputSchema."
+      now: "Every tool has title and an outputSchema (anyOf success shape, shared error shape) for revisions that define them."
+    - id: annotations
+      was: "Only readOnlyHint, and destructive/idempotent/openWorld fell to spec defaults (destructive true, openWorld true), which is dishonest for an in session tool."
+      now: "All four hints set per tool. add_* are additive; set, move, resize, rename, delete and group are destructive; undo and redo are non idempotent; session_new is destructive and non idempotent; state_get, project_summary, state_hash, dry_run, new_id are read only; nothing is open world."
+    - id: per_revision_fields
+      was: "annotations, structuredContent were sent to clients that negotiated revisions that predate them."
+      now: "annotations from 2025-03-26, title, outputSchema and structuredContent from 2025-06-18; older clients get text content only."
+    - id: server_info
+      was: "serverInfo had name and version only."
+      now: "Adds title and description (optional fields from 2025-11-25)."
+  unverified_or_open:
+    - "2026-07-28 modern era (T10c) is implemented for server/discover, tools/list, tools/call only. Tested against our own reading of the spec pages, never against a real modern client or SDK. Not read in full: the TypeScript schema and the multi round trip, subscriptions, progress and cancellation pages. We never return input_required, never accept subscriptions/listen (-32601) and ignore logLevel (no notifications/message emitted, which the spec requires when absent)."
+    - "A bare server/discover without modern _meta is answered -32601 (legacy probe outcome), not served. The spec lists _meta as required on every modern request, so this is consistent, but a client that sends discover with no _meta expecting a DiscoverResult would fall back to legacy."
+    - "Modern requests are validated for version and capabilities object only. Whether tools/call params.arguments or other fields have modern specific rules was not checked beyond the tools page."
+    - "ttlMs default 60000 (env COMPOSER_MCP_CACHE_TTL_MS) is our choice, the tool set is fixed for the process lifetime. The spec gives no recommended value."
+    - "Cancellation and progress: calls run one at a time to completion on the reader thread, so notifications/cancelled cannot interrupt a call, and no progress is sent. Allowed by the spec (SHOULD, MAY)."
+    - "Requests before initialize are served, not refused. The spec only says clients SHOULD NOT send them."
+    - "2025-11-25 tasks, icons, execution, resource links and logging are not used."
+    - "Behaviour of real clients with outputSchema anyOf at the root was not tested against any SDK validator, only against our own subset validator in schema.rs."
+    - "The 2024-11-05 and 2025-03-26 pages were read for tools only. Their lifecycle pages were not re-read; version echo behaviour is the same in all revisions per the 2025-11-25 text."

@@ -1,0 +1,76 @@
+[
+  {
+    "command": "duplicate_region",
+    "new_region": "b201b1a53119ac9ae53e4a52a06fec00",
+    "note_ids": [
+      "b957599fbb32e8bc493b36103ac8ff90",
+      "88b8ecb1e86e82648a543ae41747b97d",
+      "7d0eda73aedde863f10556a96c9805ff",
+      "76efbf0c679366a65731d1431910ed25",
+      "95a8d48fb78695cfb8fcecb49af4d936",
+      "2dbf6100649b5ceac918ab2fc7cb4dda",
+      "55ff6a9d52b8e8e1b439232f1520ef8c",
+      "c7fdfd2388689de9bc621c704613e168"
+    ],
+    "region": "00000000000000000000000000000201",
+    "start": 15360,
+    "track": null
+  },
+  {
+    "command": "move_note",
+    "note": "88b8ecb1e86e82648a543ae41747b97d",
+    "pitch": 76,
+    "region": "b201b1a53119ac9ae53e4a52a06fec00",
+    "start": 1920
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "2dbf6100649b5ceac918ab2fc7cb4dda",
+    "region": "b201b1a53119ac9ae53e4a52a06fec00",
+    "velocity": 114
+  },
+  {
+    "command": "duplicate_region",
+    "new_region": "93c58b936c9ea7d7f4cbcf6690e0d490",
+    "note_ids": [
+      "063c374b2dda1813bf489333744e26f4",
+      "f281c1aca311177067ff662b56e7b8fe",
+      "119da76e015e3742e85c89f8376e020c",
+      "496da79446b7aeb10d563b53c879d121",
+      "43f6eb43630f206e88c59e30e8dd5e4f",
+      "4e433dd30aff72c9e99aabd22e4c40a5",
+      "374077e883f8322d558487cf5e7d7e89",
+      "90362e0151305f72d39862e5c4489390"
+    ],
+    "region": "00000000000000000000000000000201",
+    "start": 30720,
+    "track": null
+  },
+  {
+    "command": "move_note",
+    "note": "119da76e015e3742e85c89f8376e020c",
+    "pitch": 77,
+    "region": "93c58b936c9ea7d7f4cbcf6690e0d490",
+    "start": 3840
+  },
+  {
+    "command": "move_note",
+    "note": "4e433dd30aff72c9e99aabd22e4c40a5",
+    "pitch": 74,
+    "region": "93c58b936c9ea7d7f4cbcf6690e0d490",
+    "start": 9600
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "374077e883f8322d558487cf5e7d7e89",
+    "region": "93c58b936c9ea7d7f4cbcf6690e0d490",
+    "velocity": 108
+  },
+  {
+    "command": "move_note",
+    "note": "90362e0151305f72d39862e5c4489390",
+    "pitch": 72,
+    "region": "93c58b936c9ea7d7f4cbcf6690e0d490",
+    "start": 13440
+  }
+]

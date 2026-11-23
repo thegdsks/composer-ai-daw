@@ -1,0 +1,24 @@
+[package]
+name = "composer-wasm"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+composer-engine = { path = "../composer-engine" }
+composer-sampler = { path = "../composer-sampler" }
+composer-commands = { path = "../composer-commands" }
+composer-model = { path = "../composer-model" }
+composer-format = { path = "../composer-format" }
+composer-theory = { path = "../composer-theory" }
+composer-recipes = { path = "../composer-recipes" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+composer-render = { path = "../composer-render" }
+composer-catalogue = { path = "../composer-catalogue" }

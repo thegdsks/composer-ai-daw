@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "composer": {
+      "command": "/path/to/composer-mcp",
+      "args": [],
+      "env": {
+        "COMPOSER_COMPOSERD": "/path/to/composerd"
+      }
+    },
+    "composer-remote": {
+      "command": "/path/to/composer-mcp",
+      "args": [],
+      "env": {
+        "COMPOSER_WS_URL": "ws://127.0.0.1:7420",
+        "COMPOSER_TOKEN": "paste the pairing token composerd printed"
+      }
+    }
+  }
+}

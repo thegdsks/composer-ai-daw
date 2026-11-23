@@ -1,0 +1,12 @@
+# D28 templates and recipes: lists and plans change nothing, each apply is one undo step.
+{"method":"session.new","params":{"name":"Recipes","id":"000000000000000000000000000000f5"},"expect":{"undo_depth":0}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"templates.list","expect":{"templates":"@any"}}
+{"method":"recipes.list","expect":{"recipes":"@any"}}
+{"method":"recipe.plan","params":{"recipe":"calm_sections","seed":2,"params":{"minutes":1}},"expect":{"applies":true,"would_change":true,"seed":2}}
+{"method":"recipe.plan","params":{"recipe":"extend_to_length"},"expect_error":{"data":{"code":"no_target"}}}
+{"method":"template.apply","params":{"template":"calm-hour","seed":1},"expect":{"undo_depth":1,"undo_label":"Template: Calm hour"}}
+{"method":"recipe.apply","params":{"recipe":"calm_sections","seed":2,"params":{"minutes":1}},"expect":{"undo_depth":2}}
+{"method":"history.get","expect":{"total":2,"cursor":2}}
+{"method":"undo","params":{"steps":2},"expect":{"undo_depth":0}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}

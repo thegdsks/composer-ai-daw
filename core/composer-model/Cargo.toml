@@ -1,0 +1,13 @@
+[package]
+name = "composer-model"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[dependencies]
+composer-theory = { path = "../composer-theory" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

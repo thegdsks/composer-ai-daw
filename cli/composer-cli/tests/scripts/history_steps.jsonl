@@ -1,0 +1,23 @@
+# History read and step jumps (D20): five edits, undo 3 steps, redo 2, hashes line up.
+{"method":"session.new","params":{"name":"Hist","id":"000000000000000000000000000000f1"},"expect":{"undo_depth":0}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a1","name":"T1","kind":"instrument","index":null}},"expect":{"undo_depth":1}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a2","name":"T2","kind":"instrument","index":null}},"expect":{"undo_depth":2}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a3","name":"T3","kind":"instrument","index":null}},"expect":{"undo_depth":3}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a4","name":"T4","kind":"instrument","index":null}},"expect":{"undo_depth":4}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a5","name":"T5","kind":"instrument","index":null}},"expect":{"undo_depth":5}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"history.get","params":{},"expect":{"cursor":5,"total":5}}
+{"method":"history.get","params":{"limit":2,"offset":3},"expect":{"cursor":5,"total":5,"offset":3}}
+{"method":"undo","params":{"steps":0},"expect_error":{"data":{"code":"invalid_params"}}}
+{"method":"undo","params":{"steps":3},"expect":{"applied":true,"steps_applied":3,"undo_depth":2,"redo_depth":3}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"history.get","params":{},"expect":{"cursor":2,"total":5}}
+{"method":"redo","params":{"steps":2},"expect":{"steps_applied":2,"undo_depth":4,"redo_depth":1}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"undo","params":{"steps":99},"expect":{"steps_applied":4,"undo_depth":0,"redo_depth":5}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}

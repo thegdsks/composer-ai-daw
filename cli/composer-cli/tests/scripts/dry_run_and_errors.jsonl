@@ -1,0 +1,8 @@
+# Dry runs report but never change state; rejected commands carry a stable code.
+{"method":"session.new","params":{"name":"Scratch","id":"000000000000000000000000000000f1"}}
+{"method":"state.hash","expect":{"state_hash":"262def2a1cd34d82"}}
+{"method":"command.apply","params":{"dry_run":true,"command":{"command":"add_track","id":"000000000000000000000000000000a1","name":"Bass","kind":"instrument","index":null}},"expect":{"dry_run":true,"would_change":true,"state_hash":"262def2a1cd34d82"}}
+{"method":"state.hash","expect":{"state_hash":"262def2a1cd34d82"}}
+{"method":"command.apply","params":{"command":{"command":"delete_track","track":"000000000000000000000000000000ee"}},"expect_error":{"data":{"code":"@any"}}}
+{"method":"state.hash","expect":{"state_hash":"262def2a1cd34d82"}}
+{"method":"commands.describe","expect":{"commands":"@any"}}

@@ -1,0 +1,568 @@
+[
+  {
+    "command": "set_tempo",
+    "mbpm": 50000,
+    "tick": 0
+  },
+  {
+    "command": "set_key",
+    "root": 9,
+    "scale": "minor",
+    "tick": 0
+  },
+  {
+    "command": "add_track",
+    "id": "24562d92916b617f1b2f2b685fa65f2e",
+    "index": null,
+    "kind": "instrument",
+    "name": "Low drone"
+  },
+  {
+    "command": "set_instrument",
+    "instrument": "00000000000000000000000000000001",
+    "track": "24562d92916b617f1b2f2b685fa65f2e"
+  },
+  {
+    "command": "set_track_sound",
+    "sound": "builtin-sub-bass",
+    "track": "24562d92916b617f1b2f2b685fa65f2e"
+  },
+  {
+    "command": "set_track_volume",
+    "track": "24562d92916b617f1b2f2b685fa65f2e",
+    "volume": 480
+  },
+  {
+    "command": "add_track",
+    "id": "5a6fef5ab6d59078d3a4c933a1e7e5a2",
+    "index": null,
+    "kind": "instrument",
+    "name": "Warm pad"
+  },
+  {
+    "command": "set_instrument",
+    "instrument": "00000000000000000000000000000001",
+    "track": "5a6fef5ab6d59078d3a4c933a1e7e5a2"
+  },
+  {
+    "command": "set_track_sound",
+    "sound": "builtin-warm-pad",
+    "track": "5a6fef5ab6d59078d3a4c933a1e7e5a2"
+  },
+  {
+    "command": "set_track_volume",
+    "track": "5a6fef5ab6d59078d3a4c933a1e7e5a2",
+    "volume": 620
+  },
+  {
+    "command": "set_track_pan",
+    "pan": -100,
+    "track": "5a6fef5ab6d59078d3a4c933a1e7e5a2"
+  },
+  {
+    "command": "add_track",
+    "id": "47eb893d659cfaf944aa787bbb8b930a",
+    "index": null,
+    "kind": "instrument",
+    "name": "Soft piano"
+  },
+  {
+    "command": "set_instrument",
+    "instrument": "00000000000000000000000000000001",
+    "track": "47eb893d659cfaf944aa787bbb8b930a"
+  },
+  {
+    "command": "set_track_sound",
+    "sound": "builtin-soft-piano",
+    "track": "47eb893d659cfaf944aa787bbb8b930a"
+  },
+  {
+    "command": "set_track_volume",
+    "track": "47eb893d659cfaf944aa787bbb8b930a",
+    "volume": 700
+  },
+  {
+    "command": "set_track_pan",
+    "pan": 120,
+    "track": "47eb893d659cfaf944aa787bbb8b930a"
+  },
+  {
+    "command": "set_marker",
+    "name": "Arrival",
+    "tick": 0
+  },
+  {
+    "command": "add_region",
+    "id": "e5c90c265501f4c9a7c89f0c768646f9",
+    "kind": "midi",
+    "length": 61440,
+    "start": 0,
+    "track": "24562d92916b617f1b2f2b685fa65f2e"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 15360,
+        "id": "2a9b37ba02f4b72c524e87bec363c8a5",
+        "pitch": 45,
+        "start": 0,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "8d46ecda2b9a750af61d26144a5e6277",
+        "pitch": 41,
+        "start": 15360,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "c17acedaa98dd2f8ae18cae97dd99547",
+        "pitch": 36,
+        "start": 30720,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "3925e9003fbe0ba8a47d0d24635d1ea2",
+        "pitch": 43,
+        "start": 46080,
+        "velocity": 50
+      }
+    ],
+    "region": "e5c90c265501f4c9a7c89f0c768646f9"
+  },
+  {
+    "command": "add_region",
+    "id": "3c969425d33b777feab0888bb1e6ef28",
+    "kind": "midi",
+    "length": 61440,
+    "start": 0,
+    "track": "5a6fef5ab6d59078d3a4c933a1e7e5a2"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 15360,
+        "id": "ff31ad35eee52c00b228d4f52e73f42f",
+        "pitch": 57,
+        "start": 0,
+        "velocity": 49
+      },
+      {
+        "duration": 15360,
+        "id": "a1759a4c198b5317dcfeb9eee397ccbe",
+        "pitch": 60,
+        "start": 0,
+        "velocity": 52
+      },
+      {
+        "duration": 15360,
+        "id": "ed22be64b4d3a63c3e8d945566cc2657",
+        "pitch": 64,
+        "start": 0,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "259bc7df157eedbad30a4f856436535e",
+        "pitch": 57,
+        "start": 15360,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "9cae23856572c2b89b4c98d19de7c48e",
+        "pitch": 60,
+        "start": 15360,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "f62f6b0089f8c1b6515e41629ad29b5f",
+        "pitch": 65,
+        "start": 15360,
+        "velocity": 48
+      },
+      {
+        "duration": 15360,
+        "id": "e89f86f8b03a552bf6c3df8acba816bb",
+        "pitch": 55,
+        "start": 30720,
+        "velocity": 51
+      },
+      {
+        "duration": 15360,
+        "id": "569dd18dc96492ba0c15484ea588834c",
+        "pitch": 60,
+        "start": 30720,
+        "velocity": 52
+      },
+      {
+        "duration": 15360,
+        "id": "e3c1133caf132f323f841e6734424d09",
+        "pitch": 64,
+        "start": 30720,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "d25b8b0ac028ed32941497e802ff3015",
+        "pitch": 55,
+        "start": 46080,
+        "velocity": 50
+      },
+      {
+        "duration": 15360,
+        "id": "cbe2b34b23df1940cdc72123be0d8dda",
+        "pitch": 59,
+        "start": 46080,
+        "velocity": 48
+      },
+      {
+        "duration": 15360,
+        "id": "46ff9d021c72187cbe2a76be5646922e",
+        "pitch": 62,
+        "start": 46080,
+        "velocity": 49
+      }
+    ],
+    "region": "3c969425d33b777feab0888bb1e6ef28"
+  },
+  {
+    "command": "add_region",
+    "id": "da88f680687a6f9dc1cb08d58aff8ee2",
+    "kind": "midi",
+    "length": 61440,
+    "start": 0,
+    "track": "47eb893d659cfaf944aa787bbb8b930a"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 2880,
+        "id": "ef3ddb03e1536145c1d847b2ee33269a",
+        "pitch": 64,
+        "start": 0,
+        "velocity": 66
+      },
+      {
+        "duration": 2880,
+        "id": "d111c27225c1016631c6bfcc91be1652",
+        "pitch": 64,
+        "start": 12480,
+        "velocity": 58
+      },
+      {
+        "duration": 5760,
+        "id": "8256a0260ebad7d9652d8acd9c119748",
+        "pitch": 60,
+        "start": 15360,
+        "velocity": 58
+      },
+      {
+        "duration": 2880,
+        "id": "0b6f9a878e8ba092b8c6ca24b2fd9d67",
+        "pitch": 60,
+        "start": 16320,
+        "velocity": 59
+      },
+      {
+        "duration": 3840,
+        "id": "4ee5574847b6ee892666c1eeaa92137e",
+        "pitch": 60,
+        "start": 17280,
+        "velocity": 60
+      },
+      {
+        "duration": 2880,
+        "id": "bc2486c3b40e866c65560b99f0356276",
+        "pitch": 65,
+        "start": 22080,
+        "velocity": 62
+      },
+      {
+        "duration": 4800,
+        "id": "0b7a682236fb8c193badc077c29a1502",
+        "pitch": 64,
+        "start": 31680,
+        "velocity": 66
+      },
+      {
+        "duration": 1920,
+        "id": "bddc69ad36631e55b879656f7814d7b2",
+        "pitch": 64,
+        "start": 33600,
+        "velocity": 66
+      },
+      {
+        "duration": 4800,
+        "id": "893e6a639810ff1167187494eb442457",
+        "pitch": 64,
+        "start": 36480,
+        "velocity": 64
+      },
+      {
+        "duration": 4800,
+        "id": "a23bac932696456431d290c08f69a7c4",
+        "pitch": 65,
+        "start": 38400,
+        "velocity": 60
+      },
+      {
+        "duration": 2880,
+        "id": "59e48fd0e541562d182df986d4417ad4",
+        "pitch": 67,
+        "start": 39360,
+        "velocity": 60
+      },
+      {
+        "duration": 1920,
+        "id": "9bd47658de06550f47d30d0974e5ec94",
+        "pitch": 62,
+        "start": 52800,
+        "velocity": 59
+      },
+      {
+        "duration": 1920,
+        "id": "f58753167c68b78f124ec77a9995bb27",
+        "pitch": 62,
+        "start": 55680,
+        "velocity": 66
+      }
+    ],
+    "region": "da88f680687a6f9dc1cb08d58aff8ee2"
+  },
+  {
+    "command": "set_marker",
+    "name": "Return",
+    "tick": 61440
+  },
+  {
+    "command": "add_region",
+    "id": "207df0300713b14437c1004112266eca",
+    "kind": "midi",
+    "length": 61440,
+    "start": 61440,
+    "track": "24562d92916b617f1b2f2b685fa65f2e"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 15360,
+        "id": "ef405aebcd860f95a1ed98c1361261d2",
+        "pitch": 45,
+        "start": 0,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "2cf6cba15fd55cf04e5b31c6c4a7f41f",
+        "pitch": 41,
+        "start": 15360,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "2712b0f66d19ccff72ba45c502b428a6",
+        "pitch": 43,
+        "start": 30720,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "4777bfc3f65b4c96d87f223280259d8e",
+        "pitch": 45,
+        "start": 46080,
+        "velocity": 44
+      }
+    ],
+    "region": "207df0300713b14437c1004112266eca"
+  },
+  {
+    "command": "add_region",
+    "id": "cecfe9079b4143225c037ec849480e3a",
+    "kind": "midi",
+    "length": 61440,
+    "start": 61440,
+    "track": "5a6fef5ab6d59078d3a4c933a1e7e5a2"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 15360,
+        "id": "3f9ab5e2668f1f1c12757c02e0cb9773",
+        "pitch": 57,
+        "start": 0,
+        "velocity": 45
+      },
+      {
+        "duration": 15360,
+        "id": "14dbf37de1479f41f790f1a326ed9936",
+        "pitch": 60,
+        "start": 0,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "2abea526682f0dc08bd477cdfea46484",
+        "pitch": 64,
+        "start": 0,
+        "velocity": 45
+      },
+      {
+        "duration": 15360,
+        "id": "67e93dafd6438607a679d32c09978257",
+        "pitch": 57,
+        "start": 15360,
+        "velocity": 43
+      },
+      {
+        "duration": 15360,
+        "id": "68238183d8e77b0348ff05f80d323c82",
+        "pitch": 60,
+        "start": 15360,
+        "velocity": 45
+      },
+      {
+        "duration": 15360,
+        "id": "c77271ec8920faa2f692daf952cdc606",
+        "pitch": 65,
+        "start": 15360,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "587175bbf5cd452bd27b4a4979dd19f6",
+        "pitch": 55,
+        "start": 30720,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "72ef450e454dd9b9b3291493cccc409c",
+        "pitch": 59,
+        "start": 30720,
+        "velocity": 45
+      },
+      {
+        "duration": 15360,
+        "id": "66652a8ddec1834161b030c322e19186",
+        "pitch": 62,
+        "start": 30720,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "36da1e72071066ea626fc89b3eeec9f3",
+        "pitch": 57,
+        "start": 46080,
+        "velocity": 44
+      },
+      {
+        "duration": 15360,
+        "id": "e754230e82255b002abaf4bfae5f86fc",
+        "pitch": 60,
+        "start": 46080,
+        "velocity": 42
+      },
+      {
+        "duration": 15360,
+        "id": "13872255c3e8d19630d57535301da195",
+        "pitch": 64,
+        "start": 46080,
+        "velocity": 43
+      }
+    ],
+    "region": "cecfe9079b4143225c037ec849480e3a"
+  },
+  {
+    "command": "add_region",
+    "id": "c86e2cf845035aefa6e3bcc02c5ed9ae",
+    "kind": "midi",
+    "length": 61440,
+    "start": 61440,
+    "track": "47eb893d659cfaf944aa787bbb8b930a"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 5760,
+        "id": "85281d62480f9caeeaac57c61fb0fb04",
+        "pitch": 60,
+        "start": 0,
+        "velocity": 57
+      },
+      {
+        "duration": 1920,
+        "id": "ffb725c88c4874e076c7746083495eaf",
+        "pitch": 60,
+        "start": 1920,
+        "velocity": 50
+      },
+      {
+        "duration": 3840,
+        "id": "91d9fd2225f39bc986222ec973ceab2c",
+        "pitch": 64,
+        "start": 4800,
+        "velocity": 57
+      },
+      {
+        "duration": 3840,
+        "id": "aca926844f2d0a96afac24c73b846a3a",
+        "pitch": 65,
+        "start": 10560,
+        "velocity": 48
+      },
+      {
+        "duration": 5760,
+        "id": "f13a3a2e6d82390d2d6ee02c2efb30e9",
+        "pitch": 60,
+        "start": 17280,
+        "velocity": 52
+      },
+      {
+        "duration": 2880,
+        "id": "0acad90c48111bea5efc9cd271c4ab58",
+        "pitch": 67,
+        "start": 31680,
+        "velocity": 53
+      },
+      {
+        "duration": 5760,
+        "id": "636818d4df8bd2db34e7cd73e8cf055d",
+        "pitch": 65,
+        "start": 38400,
+        "velocity": 49
+      },
+      {
+        "duration": 1920,
+        "id": "a01e7379ddb856814c109a3bfcfc6062",
+        "pitch": 67,
+        "start": 40320,
+        "velocity": 54
+      },
+      {
+        "duration": 3840,
+        "id": "90ef401991132dc312291cf2db252d37",
+        "pitch": 62,
+        "start": 42240,
+        "velocity": 54
+      },
+      {
+        "duration": 1920,
+        "id": "254ae3d393527649345f49cb353724aa",
+        "pitch": 62,
+        "start": 50880,
+        "velocity": 55
+      }
+    ],
+    "region": "c86e2cf845035aefa6e3bcc02c5ed9ae"
+  }
+]

@@ -1,0 +1,546 @@
+# Verified reference map of openDAW. Paths in src: are relative to the clone root
+# <reference checkout>/opendaw. Facts only from reading code or docs. Behavior is described, not copied.
+# Reimplement from understanding; the source is AGPL-3.0-or-later (see meta.license).
+
+meta:
+  clone_commit: 363e54eacd25e85535b33bbb0c722e594da6f6d5
+  license:
+    value: AGPL-3.0-or-later
+    src: [LICENSE, package.json (license field), README.md:6-12]
+    note: Copyleft. Copying code into a closed product is not allowed; ideas and formats are free.
+  languages:
+    - TypeScript (npm workspace, turborepo): packages/lib, packages/studio, packages/app
+    - Rust (cargo workspace, compiled to WebAssembly): crates/
+    - Sass (UI styling), homebrew JSX runtime (no React, no virtual DOM)
+  src_languages: introduction.md:1-60
+  layout:
+    src: introduction.md:1-60
+    layers: "config -> lib/* (DAW-agnostic) -> studio/* (DAW domain) -> app/* (web apps)"
+    rust_side: "leaf crates (math, dsp, value) -> infra (engine-env, processors, transport, voicing, abi) -> cdylibs (engine, stock-devices/*, stretch-wasm, sine)"
+    generated_gitignored:
+      - packages/studio/boxes/src/** (TS box classes, from forge-boxes schema)
+      - crates/studio-boxes/src/registry.rs (Rust registry, same generator run)
+      - packages/studio/adapters/src/index.ts, packages/studio/scripting/src/api.declaration.d.ts
+    src_generated: introduction.md (section Generated Code)
+  default_engine: "WASM (Rust) engine is default since mid 2026; TS engine (core-processors) still exists as fallback"
+  src_engine: [introduction.md (core-wasm section), packages/studio/sdk/README.md:22-45]
+  repo_posture:
+    - AI-assisted code allowed if contributor understands every line; AI process documented in /plans
+    - plans/*.md hold design docs written during implementation (this is where intent lives)
+    - docs/error-triage.md triages production error reports
+  src_posture: [README.md (Looking for Contributors), docs/error-triage.md]
+  wasm_contract_markers: "About 70 files carry the comment tag WASM CONTRACT where TS and Rust must stay byte-identical (PPQN, serializer layout, update tags, sync-log commit layout). Grep for it before changing any shared format."
+  src_wasm_contract: [packages/lib/box/src/serializer.ts:5-8, packages/lib/box/src/updates.ts:7, packages/lib/dsp/src/ppqn.ts:11, packages/studio/core/src/sync-log/Commit.ts:6-10]
+
+document_model:
+  summary: "Whole project is one typed object graph (BoxGraph). Everything (tracks, regions, notes, devices, automation, selection, even UI view state) is a box in it. Edges are pointer fields. All edits are transactions that emit a stream of 4 update kinds. That stream drives undo, engine sync, collab, and scripting."
+  concepts:
+    box:
+      what: "Typed record with a UUID and a fixed set of fields addressed by small integer keys. Subclass of abstract Box. Has a name (class name) and pointerRules (what may point at it, and whether at least one incoming pointer is mandatory)."
+      src: packages/lib/box/src/box.ts:35-60
+      resource_types: "A box may be flagged resource: preserved (UUID kept on copy/paste, content addressed audio files), internal (UUID regenerated), shared (regenerated and incoming edges not followed)."
+      src_resource: packages/lib/box/src/box.ts:35-41
+    field:
+      what: "Slot inside a box keyed by an int16. Kinds: primitive (int32, float32, boolean, string, bytes), plain container field (holds children and acts as pointer target), pointer, array, object."
+      src: [packages/lib/box-forge/src/schema.ts:45-110, packages/lib/box/src/field.ts, packages/lib/box/src/primitive.ts]
+      constraints: "Primitive fields carry constraints (min, mid, max, scaling such as decibel or linear, index, non-negative, or explicit values list) plus a unit string in the schema. Automation value mappings live in the adapters (createParameter), not the schema."
+      src_constraints: [packages/studio/forge-boxes/src/schema/std/AudioUnitBox.ts:12-19, introduction.md (studio-adapters section)]
+      keys_are_stable_ids: "Field keys are persisted ids. Deprecated fields stay in the schema with deprecated flag and are skipped on write. Pointer enum values are ordinals and APPEND ONLY."
+      src_stable: [packages/lib/box/src/serializer.ts:11-14, packages/studio/enums/src/Pointers.ts:62]
+    pointer:
+      what: "Directed edge from a pointer field to a target vertex (a box or a field), typed by an enum member of Pointers. A target declares pointerRules.accepts (allowed pointer types), mandatory (needs at least one incoming), exclusive (at most one incoming)."
+      src: [packages/lib/box/src/pointer.ts, packages/lib/box/src/pointer-hub.ts, packages/studio/forge-boxes/src/schema/std/AudioUnitBox.ts:33-45]
+      mandatory_pointer_semantics: "A mandatory pointer means the owning box cannot live without its target. Deleting the target cascades: the owning box is deleted in the same transaction. Deleting a box also follows outgoing pointers downstream and mandatory incoming pointers upstream (graph.dependenciesOf)."
+      src_cascade: docs/graph.md (sections Box Deletion and Cascade)
+      containment_idiom: "Containment is modelled as child -> parent pointers with mandatory true. Example: a NoteRegionBox points to a TrackBox via regions (mandatory) and to its NoteEventCollection via events (mandatory). Order is an explicit int index field, not array order."
+      src_containment: [packages/studio/forge-boxes/src/schema/std/timeline/NoteRegionBox.ts:10-14, packages/studio/forge-boxes/src/schema/std/timeline/TrackBox.ts:9-14]
+    address:
+      what: "UUID of a box plus a path of field keys. Used for every update and for linking TS and Rust (device parameters are bound by field-key path like [16,10], never a packed id)."
+      src: [packages/lib/box/src/address.ts, crates/engine/src/param_automation.rs:17-21, crates/stock-devices/device-nano/src/lib.rs:35-46]
+  schema_declaration_and_codegen:
+    how: "Each box is a TS object (BoxSchema) in packages/studio/forge-boxes/src/schema/{std,devices}/**. Fields keyed by int. A generator (lib-box-forge, uses ts-morph) writes TS box classes plus a Rust registry. The schema file is the single source of truth for both languages."
+    src: [packages/lib/box-forge/src/schema.ts, packages/lib/box-forge/src/ts-class-writer.ts, packages/lib/box-forge/src/rust-registry.ts, introduction.md (studio-forge-boxes section)]
+    gotcha: "Generated outputs are gitignored, so a fresh clone does not type-check until the build runs."
+    src_gotcha: introduction.md (Generated Code)
+    legacy_parity: "Adding fields must keep old projects loading; devices test that schema defaults reproduce old behavior (legacy_parity tests)."
+    src_parity: [crates/stock-devices/device-nano/src/lib.rs:11-12, crates/stock-devices/device-nano/tests/legacy_parity.rs]
+  transactions:
+    modify_flow: "BoxEditing.modify wraps a closure in begin/end transaction. End validates affected boxes (rolls the whole transaction back by applying inverse updates if validation fails), fires deferred pointer-hub notifications, then transaction observers, then editing observers. Nested modify just runs inline in the outer transaction."
+    src: [docs/graph.md:1-40, docs/live-collab-conflict-resolve.md:1-40, packages/lib/box/src/editing.ts:240-275]
+    invariant: "The graph is valid at every transaction end; failed validation rolls back everything."
+    pointer_deferral: "Pointer changes inside a transaction are recorded and applied only at end, so code watching pointer hubs sees changes after all mutations."
+    src_defer: docs/graph.md:24-48
+  update_types:
+    kinds: "Exactly four: new (uuid, class name, serialized fields), delete (same, enough to undo), pointer (address, old target, new target), primitive (address, type, old value, new value). Forward-only sync variants add update-bytes (range splice of a bytes field when cheaper than resending)."
+    src: [packages/lib/box/src/updates.ts:7-50, packages/lib/box/src/sync-source.ts:55-80, crates/boxgraph/src/updates.rs:1-25]
+    optimization: "optimizeUpdates collapses a transaction's update list before it becomes an undo step."
+    src_opt: packages/lib/box/src/editing.ts:22,265
+  undo_redo:
+    model: "History is a list of marked steps; each step is a list of Modification (a set of Updates). Undo applies inverses (needs old values, which is why updates carry old and new). Redo replays forward."
+    src: [packages/lib/box/src/editing.ts:20-50,63-76,178-240]
+    marking: "modify(..., mark=true) seals a step. Unmarked pending changes (selection, edit pointers, gesture in progress) fold into the next marked edit instead of being their own undo entry. append() extends the previous step. beginModification and checkpoint give interactive drags with approve/revert and rollback/commit/discard."
+    src_marking: [packages/lib/box/src/editing.ts:262-275, packages/lib/box/src/editing.ts:333-335]
+    outside_history: "BoxEditing takes a predicate to exclude boxes (UI view state, selection) from history."
+    src_outside: packages/lib/box/src/editing.ts:63-84
+    saved_marker: "History index tracks the saved position so hasUnsavedChanges works across undo/redo; splicing away the saved state sets it to -1."
+    src_saved: packages/lib/box/src/editing.ts:71-102
+  serialization:
+    box_wire_format: "Per box: magic FLDS, field count, then per field key (short), byte length (int), payload. Reader skips unknown keys, so it is forward compatible. Deprecated fields skipped on write."
+    src: packages/lib/box/src/serializer.ts:5-36
+    graph_checksum: "BoxGraph.checksum folds every box's write into a hash; used to prove a mirror (engine, collab peer, script origin) equals the source."
+    src_checksum: packages/lib/box/src/graph.ts:251-255
+    project_file: "ProjectSkeleton.encode: magic 0x4F50454E, format version int, length, then the whole box graph bytes."
+    src_project_file: packages/studio/adapters/src/project/ProjectSkeleton.ts:36,99-108
+    migration: "ProjectMigration runs per-box migrations on load (migration directory); loading tolerates unknown fields."
+    src_migration: [packages/studio/core/src/project/ProjectMigration.ts, packages/studio/core/src/project/migration]
+  sync:
+    ts_to_ts_and_rust: "SyncSource subscribes to a graph and, on each committed (not rolled back) transaction, sends the update list over a messenger channel. SyncTarget applies forward tasks (createBox, setValue, splice bytes, retarget pointer) inside a transaction the caller owns. Initial state is one 'new' task per box."
+    src: [packages/lib/box/src/sync-source.ts:9-50, packages/lib/box/src/sync-target.ts:12-54]
+    rust_mirror: "Rust crate boxgraph parses the same byte stream and maintains a live mirror; it can revert an aborted transaction. The engine rejects an invalid transaction and reports an error."
+    src_rust: [crates/boxgraph/src/updates.rs:1-25, packages/studio/core-wasm/src/processor.ts:632-636]
+    integrity: "Main thread sends the source graph's 32 byte checksum; the worklet compares it with the engine's rolling checksum and errors on divergence."
+    src_integrity: packages/studio/core-wasm/src/protocol.ts:11-19
+  adapters:
+    what: "Adapters wrap a raw box to give behavior: parameter value mappings (automatable parameters), sorted child collections, note and clip sequencing, engine addresses, validation. They are the shared vocabulary of UI, TS engine and WASM engine. A box is dumb data; the adapter is the object the UI binds to."
+    src: [introduction.md (studio-adapters), packages/studio/adapters/src/BoxAdapter.ts:1-8]
+    lookup: "BoxAdapters.adapterFor(box, typeCheck) returns a cached adapter per box UUID, created via a visitor over box classes; adapters are Terminable and die with their box."
+    src_lookup: packages/studio/adapters/src/BoxAdapters.ts:246
+    device_adapter_shape: "A device adapter exposes type (audio-effect, midi-effect, instrument), accepts (audio or midi), a ParameterAdapterSet built via createParameter per automatable field (with value mapping and string mapping), host pointer, index/label/enabled/minimized fields, and deviceHost()."
+    src_device: packages/studio/adapters/src/devices/audio-effects/DelayDeviceBoxAdapter.ts:26-60
+  domain_shape_of_a_project:
+    root: "RootBox points mandatory to a TimelineBox and a Groove, holds users, the audio unit collection, base frequency 440 Hz (range 400 to 480)."
+    src: packages/studio/forge-boxes/src/schema/std/RootBox.ts:7-19
+    audio_unit: "AudioUnitBox is the channel strip. type string: instrument, bus, aux, output. Fields: index, volume (dB, -96 to +6), panning, mute, solo. Containers: tracks, midi-effects, input (instrument host or audio output), audio-effects, aux-sends, plus output pointer and capture pointer."
+    src_unit: [packages/studio/enums/src/AudioUnitType.ts:1-5, packages/studio/forge-boxes/src/schema/std/AudioUnitBox.ts:5-60]
+    track: "TrackBox lives under an AudioUnitBox. type: 0 undefined, 1 notes, 2 audio, 3 value (automation). Holds regions and clips collections; target pointer says what it controls (a unit's note input or an automatable field)."
+    src_track: [packages/studio/forge-boxes/src/schema/std/timeline/TrackBox.ts:7-20, packages/studio/adapters/src/timeline/TrackType.ts:3]
+    region: "NoteRegionBox, AudioRegionBox, ValueRegionBox: position, duration, loop-offset, loop-duration (all PPQN), mute, label, hue, optional groove pointer. Content lives in a separate collection box (NoteEventCollectionBox etc.) so regions can share or loop content."
+    src_region: packages/studio/forge-boxes/src/schema/std/timeline/NoteRegionBox.ts:8-22
+    time_unit: "PPQN with Quarter = 960, Bar (4/4) = 3840. Same constants mirrored in Rust."
+    src_time: packages/lib/dsp/src/ppqn.ts:11-15
+    selection_in_graph: "Selection and view state are boxes too (SelectionBox with mandatory pointers selection and selectable), so they sync, can be excluded from undo, and cascade-delete with the selected object."
+    src_sel: [docs/graph.md (SelectionBox Cascade), packages/studio/forge-boxes/src/schema/std/SelectionBox.ts]
+
+engine_flow:
+  topology:
+    summary: "Main thread owns the authoritative box graph. A SyncSource streams transaction bytes over a typed message channel to an AudioWorklet that hosts engine.wasm (Rust). The worklet applies them to the Rust BoxGraph mirror, reconciles processors, and renders 128 frame quanta. Devices are separate position independent wasm side modules linked into the same linear memory and function table."
+    src: [docs/wasm-audio-engine-flow.svg, introduction.md (Runtime Topology, core-wasm), packages/studio/core-wasm/src/protocol.ts:1-26]
+    channels: "lib-runtime Communicator over MessagePort, one direction each. engine-sync-bytes (applyUpdates, checksum), engine-commands (play, stop, setPosition, recording prep, clip schedule, note signals, wclap relay, querySignalGraph), engine-to-client (state about 30 Hz, heap stats about 1 Hz, errors), engine-preferences."
+    src_channels: [packages/studio/core-wasm/src/processor.ts:116,192,245-260, packages/studio/adapters/src/protocols.ts:46-90, docs/wasm-audio-engine-flow.svg (labels)]
+    telemetry_up: "LiveStream (lib-fusion) carries meters, spectra, note activity from audio thread to UI lock-free."
+    src_live: [introduction.md (Runtime Topology), packages/lib/fusion/src/live-stream/README.md]
+    memory_model:
+      current_code: "Engine linear memory is NON-shared, created inside the worklet or offline worker, starts at 16 MB (256 pages), grows on demand via the talc allocator. Every grow detaches JS views, so views are rebuilt after allocation. Audio frames are copied into engine memory through allocate/set calls (click sound, frozen audio, samples)."
+      src: [packages/studio/core-wasm/src/engine-modules.ts:64-70, packages/studio/core-wasm/src/processor.ts:296-326]
+      discrepancy: "The 2026-06-25 flow diagram and the sdk README describe SharedArrayBuffer and cross-origin isolation (COOP/COEP). Code and plans/wasm-audio/memory-ceiling.md say non-shared memory. Treat the diagram as older; confirm before relying on SAB. Control flags still use a SharedArrayBuffer Int32Array."
+      src_disc: [docs/wasm-audio-engine-flow.svg, packages/studio/sdk/README.md:22-30, plans/wasm-audio/memory-ceiling.md:34-40, packages/studio/core-wasm/src/processor.ts:165]
+  worklet_shell:
+    what: "processor.ts is a thin TS AudioWorkletProcessor: creates memory, instantiates engine and device modules, wires channels, calls engine render each process(), feeds meters/peaks/analysers, and on any wasm trap invalidates the processor and reports so the main thread offers a restart."
+    src: [packages/studio/core-wasm/src/processor.ts:376-480,632-640, plans/wasm-audio/memory-ceiling.md:45-60]
+    boot_and_linking: "boot.ts and device-linker.ts instantiate engine.wasm (shared function table, 512 slots reserved) then link every device_*.wasm into the same memory and table; devices are looked up by device BOX TYPE name."
+    src_boot: [packages/studio/core-wasm/src/boot.ts:15,57, packages/studio/core-wasm/src/engine-modules.ts:72-80, packages/studio/core-wasm/src/protocol.ts:5-10]
+    offline_render: "The same engine runs in a worker (offline-worker.ts) for mixdown, stems, freeze; OfflineEngineRenderer abstracts it."
+    src_offline: [packages/studio/core-wasm/src/offline-worker.ts, introduction.md (studio-core section)]
+    engine_variant: "EngineFacade and EngineVariant let the app pick WASM or TS engine; WasmEngine.install, ensureReady, setEnabled (persists opt-out)."
+    src_variant: [packages/studio/sdk/README.md:22-45, packages/studio/core/src/EngineVariant.ts]
+  block_processing:
+    quantum: "RENDER_QUANTUM = 128 frames. A quantum is split into blocks at tempo change grid (TEMPO_CHANGE_GRID = 80 pulses) and loop boundaries; every processor receives the list of blocks (ProcessInfo). A block carries pulse range p0..p1, sample range s0..s1, bpm, anchor, discontinuity flag."
+    src: [crates/transport/src/transport.rs:1,14-17,188-213, crates/engine-env/src/process_info.rs:1-8]
+    fixed_bpm_fast_path: "With fixed bpm and no events a quantum is exactly one block."
+    src_fast: crates/transport/src/transport.rs:202-215
+    render_paths: "render_quantum while playing, render_paused when stopped (position advances free-run so audition and live notes still sound); output bus summed to L/R; metronome mixed per moving block, delayed by master arrival."
+    src_paths: [docs/wasm-audio-engine-flow.svg (labels), plans/delay-compensation.md:48-52]
+    graph_build: "On apply_updates the engine reconciles its processor graph from boxes: units, device chains, topological sort (cycle check would_cycle). The graph is a DAG, no feedback routes."
+    src_graph: [docs/wasm-audio-engine-flow.svg, crates/engine-env/src/topological_sort.rs, plans/delay-compensation.md:21]
+    no_alloc_in_render: "Allocator rule: no allocation in process; buffers sized during reconcile. Voices live in pre-zeroed fixed pools."
+    src_alloc: [plans/delay-compensation.md:112-114, crates/stock-devices/device-nano/src/lib.rs:25]
+  scheduling:
+    time_domain: "Notes and automation are scheduled in PPQN pulses; sample offsets are resolved last via host_pulse_to_offset inside the block."
+    src: [docs/wasm-audio-engine-flow.svg (PROCESSOR GRAPH), crates/abi/src/lib.rs:158]
+    notes: "Per audio unit, NoteSequencer is a pull source: for a block's pulse range it reads note regions through a content source, resolves region looping (locate_loops), emits globally positioned note-on events, and keeps held notes in one retainer so it can emit note-complete at span end or immediately on transport stop or loop wrap. Chance rolls use a seeded PRNG never reseeded. Live and audition notes are emitted before the transport gate so they sound while stopped."
+    src_notes: crates/engine-env/src/note_sequencer.rs:1-30
+    midi_fx_chain: "MIDI effects are pull sources chained before the instrument (instrument <- fx <- sequencer). Each device pulls its upstream for [from,to) via host_pull_events."
+    src_midi: [crates/stock-devices/device-pitch/src/lib.rs:1-4, crates/abi/src/lib.rs:157]
+    audio_regions: "AudioRegionPlayer is the unit's source for audio tracks: per quantum it range-queries sorted regions, resolves source sample, renders no-stretch at native speed with a free-running read head reseated from the tempo map only at discontinuities (region entry, loop wrap, locate); linear interpolation across rate mismatch; gain and fade envelope plus boundary declick. Time-stretch and pitch-stretch live in time_stretch.rs. Clips (launch) play a virtual region via a shared ClipSequencer; timeline regions play only in clip-free sections."
+    src_audio: [crates/engine/src/audio_region_player.rs:1-20, crates/engine/src/time_stretch.rs]
+    tempo_map: "Tempo is a step function sampled on the TEMPO_CHANGE_GRID from a live ValueCurve (tempo automation) or constant nominal bpm. interval-to-seconds integrates over the grid so no-stretch audio stays correct under tempo ramps."
+    src_tempo: [crates/engine/src/tempo_map.rs:1-30, crates/transport/src/transport.rs:17]
+    automation: "Each automatable parameter binds 1:1 to a Value TrackBox (field-key path to track). Value regions are loopable spans over value-event collections; the value is read live at a pulse: take the region at or before position, read its loop-local curve, otherwise hold the boundary value. Devices poll host_update_parameters on a shared update clock grid (host_first/next_update_position)."
+    src_auto: [crates/engine/src/param_automation.rs:1-20, crates/abi/src/lib.rs:164-166, crates/engine-env/src/update_clock.rs]
+    groove: "Groove warps note positions through host_groove_warp and unwarp; the groove effect pulls upstream over the unwarped range then maps positions."
+    src_groove: [crates/stock-devices/device-zeitgeist/src/lib.rs:1-4, crates/abi/src/lib.rs:179-180]
+    other_tracks: "Marker track, signature track, harmony track (chord and key events), modulation and param-automation each have an engine module."
+    src_other: [crates/engine/src/marker_track.rs, crates/engine/src/signature_track.rs, crates/engine/src/harmony_track.rs, crates/engine/src/modulation.rs]
+  delay_compensation:
+    plan_status: "Phases 0 to 6 done as of 2026-10-20; phase 7 (monitoring) and playhead subtraction open."
+    src: plans/delay-compensation.md:60-70
+    algorithm: "Each node reports own latency (default 0). After every reconcile (or when a latency changes) the engine walks the existing topological order once and computes arrival(n) = own(n) + max(arrival of data predecessors). At every junction where signals meet (bus sources, aux sends, sinks, Playfield or composite slot sums, effect composite dry/wet, sidechain ports, metronome) each input gets a delay line of max(arrival) minus arrival(input). Delay lines live on junction inputs, not on plugins, so no new graph nodes and no rewiring. Sidechain edges are order-only edges that never raise a consumer arrival."
+    src_algo: plans/delay-compensation.md:21-53,90-100
+    zero_cost: "A project with no latent device computes zero everywhere, has no delay line and renders bit-identical."
+    src_zero: plans/delay-compensation.md:52
+    latency_reporting: "ABI import host_set_latency(frames) callable from init and parameter_changed. Compressor and Maximizer report look-ahead (measured 240 frames at 48 kHz), Fold reports oversampling latency, Autotune reports PSOLA delay. WCLAP plugins report via the CLAP latency extension. Scripts declare latency (Werkstatt: @latency directive or this.latency)."
+    src_lat: [plans/delay-compensation.md:60-86, crates/abi/src/lib.rs:182]
+    automation_alignment: "Automation and modulation of a latent node are evaluated at position minus arrival through playhead_history (exact across tempo changes and loops); a lagged update clock keeps step edges sample aligned."
+    src_auto_align: [plans/delay-compensation.md:60-68, crates/engine/src/playhead_history.rs]
+    recording_and_offline: "Recorded takes and MIDI out shift by total PDC; offline render renders extra frames and drops the first total; stems delayed by total minus tap arrival; frozen buffers trimmed by own chain latency."
+    src_rec: plans/delay-compensation.md:104-112
+    cap: "Compensation delay capped at MAX_COMPENSATION_SECONDS = 0.1; no PDC on/off switch."
+    src_cap: plans/delay-compensation.md:155-160
+  bridges_back_to_host: "ABI host imports let side modules reach JS-hosted things: NAM neural amp (host_nam_*), WCLAP plugin hosting (host_wclap_*), user scripts (host_script_*), sample and soundfont resolution, panic reporting."
+  src_bridges: crates/abi/src/lib.rs:156-234
+
+devices:
+  common_pattern:
+    summary: "Each stock device is its own cdylib crate producing a tiny position independent wasm module (about 2 KB after pruning), depending only on abi, math, dsp (and voicing for instruments). It implements one of three ABI traits and the engine calls it through the shared function table. Parameters are bound by field-key path; samples and soundfonts by observed pointer fields; state is a fixed block assigned by the engine, no heap."
+    src: [introduction.md (Compiled artifacts), crates/abi/src/lib.rs:1623-1700,1789-1830,1880-1900]
+    traits:
+      Instrument: "process_audio(state, stereo out, block), handle_event (note on/off/choke), optional generate_events, init(sample_rate), parameter_changed, field_changed, sample_changed, soundfont_changed, reset, finish."
+      AudioEffect: "process_audio in place stereo, init, parameter_changed, reset; may bind a sidechain and report latency."
+      MidiEffect: "transform(input events, output events) returns count; pull-source variants pull upstream for [from,to)."
+      src: crates/abi/src/lib.rs:1623,1789,1880
+    params: "bind_parameter(field path) at init gives an id; the engine pushes ParamValue (float, int, bool) via parameter_changed, including automated values on the update clock. Value mappings (dB, linear, exponential) are applied inside the device using math::value_mapping, matching the TS adapter mapping."
+    src_params: [crates/stock-devices/device-nano/src/lib.rs:28-50, crates/abi/src/lib.rs:160-166]
+    voices: "voicing crate gives poly, mono and unison allocation shared by instruments; voices are a fixed pool, oldest stolen when full (Nano MAX_VOICES 64); mono, choke, one-shot behaviors consistent with the Playfield slot."
+    src_voices: [crates/stock-devices/device-nano/src/lib.rs:1-12,25, docs/wasm-audio-engine-flow.svg (voicing note)]
+    presets: "Presets are box-graph subtrees bundled with their resources (PresetBundle, PresetStorage, PresetMeta in studio-core; files with .odp suffix). Parameters live in boxes, so a preset is serialized boxes. A cloud preset catalog exists (FactoryCatalog)."
+    src_presets: [packages/studio/core/src/presets/PresetBundle.ts, packages/studio/core/src/presets/PresetStorage.ts, packages/studio/core/src/opfs/AssetCache.ts:10, plans/preset-folders.md]
+    port_discipline: "Most Rust devices are documented as faithful ports of earlier TS processors and must match them float for float (dsp crate says operation order matters); parity tests compare against TS."
+    src_port: [introduction.md (Leaf crates, dsp row), crates/stock-devices/device-delay/src/lib.rs:1-3]
+    to_add_a_device: "Touch: schema in forge-boxes, adapter in studio-adapters, effect or instrument factory in studio-core, Rust crate, crate list in core-wasm/build-wasm.sh. Five places."
+    src_add: introduction.md (end, Where To Start Reading)
+    build_note: "Devices need a nightly toolchain with -Zbuild-std=core for position independent code; engine builds on stable."
+    src_build: introduction.md (Compiled artifacts)
+  stock_devices:
+    instruments:
+      - {id: device-apparat, note: "SCRIPTABLE instrument; Rust side is a thin bridge, DSP is user JS in the worklet via host_script_*", src: "crates/stock-devices/device-apparat/src/lib.rs:1-5"}
+      - {id: device-cubed, note: "TB-303 style bass synth transcribed from a reference model", src: "crates/stock-devices/device-cubed/src/lib.rs:1-3"}
+      - {id: device-korpus, note: "physical modelling: modal resonator bank with 5 material laws plus plucked string", src: "crates/stock-devices/device-korpus/src/lib.rs:1-5"}
+      - {id: device-nano, note: "polyphonic one-sample sampler with start/end, loop crossfade, root key", src: "crates/stock-devices/device-nano/src/lib.rs:1-12"}
+      - {id: device-neon, note: "CZ-101 style phase distortion synth, two lines, 8 stage envelopes", src: "crates/stock-devices/device-neon/src/lib.rs:1-5"}
+      - {id: device-playfield-sample, note: "one sample slot of the Playfield drum-pad composite (windowed read head, choke)", src: "crates/stock-devices/device-playfield-sample/src/lib.rs:1-5"}
+      - {id: device-sine, note: "minimal reference instrument, shows the plugin ABI", src: "crates/stock-devices/device-sine/src/lib.rs:1-4"}
+      - {id: device-soundfont, note: "SF2 preset sampler; host delivers a SIMPLIFIED blob (sample, region, preset tables, f32 PCM), the Rust side does not parse .sf2", src: "crates/stock-devices/device-soundfont/src/lib.rs:1-5"}
+      - {id: device-tubular, note: "six operator FM (Dexed msfa port, 156 params, 155 byte voice)", src: "crates/stock-devices/device-tubular/src/lib.rs:1-4"}
+      - {id: device-vaporisateur, note: "poly 2 oscillator subtractive synth, band-limited oscs, modulated multipole filter", src: "crates/stock-devices/device-vaporisateur/src/lib.rs:1-4"}
+      - {id: device-wclap-instrument, note: "hosts a WebCLAP (CLAP compiled to wasm) instrument via host_wclap_* JS bridge", src: "crates/stock-devices/device-wclap-instrument/src/lib.rs:1"}
+      - {id: "Tape (in engine, not a stock crate)", note: "plays audio regions on audio tracks", src: "crates/engine/src/audio_region_player.rs:1-5; packages/studio/forge-boxes/src/schema/devices/instruments/TapeDeviceBox.ts"}
+      - {id: "Playfield and InstrumentComposite (in engine)", note: "Playfield hosts slot samplers (drum pads); InstrumentComposite hosts N child instruments (cells) each with own fx, summed", src: "packages/studio/forge-boxes/src/schema/devices/instruments/PlayfieldDeviceBox.ts; plans/instrument-composite.md:1-6"}
+    audio_effects:
+      src_all: "each entry: crates/stock-devices/<id>/src/lib.rs lines 1-3 (module doc)"
+      list:
+        - {id: device-autotune, note: "pitch correction, key and scale snapping, TD-PSOLA shift, reports latency"}
+        - {id: device-compressor, note: "feed-forward compressor, soft knee, auto attack/release, look-ahead, external sidechain"}
+        - {id: device-convolver, note: "zero latency partitioned convolution with impulse-response sample"}
+        - {id: device-crusher, note: "bit crusher and sample rate reducer"}
+        - {id: device-dattorro-reverb, note: "plate reverb"}
+        - {id: device-delay, note: "tempo-syncable stereo delay with filter, LFO, limiter, cross feedback"}
+        - {id: device-fold, note: "wave folder with 2x/4x/8x oversampling"}
+        - {id: device-gate, note: "noise gate with optional sidechain detector"}
+        - {id: device-maximizer, note: "brick-wall limiter with auto makeup, look-ahead"}
+        - {id: device-neural-amp, note: "NAM amp model; wrapper in Rust, inference in a shared nam-wasm module via host_nam_*"}
+        - {id: device-revamp, note: "7 band parametric EQ (HP, low shelf, 3 bells, high shelf, LP)"}
+        - {id: device-reverb, note: "FreeVerb style comb and allpass with pre-delay"}
+        - {id: device-stereo-tool, note: "volume, pan, width, invert, swap, pan law, via 2x2 matrix"}
+        - {id: device-tidal, note: "tempo-synced auto-pan or tremolo LFO"}
+        - {id: device-vocoder, note: "bank vocoder; carrier is main input; modulator is noise, self or sidechain"}
+        - {id: device-waveshaper, note: "input gain, selectable transfer function, dry/wet"}
+        - {id: device-werkstatt, note: "SCRIPTABLE audio effect; bridge to user JS Processor.process"}
+        - {id: device-wclap, note: "hosts a WebCLAP audio effect via host_wclap_*"}
+    midi_effects:
+      - {id: device-arpeggio, note: "arpeggiator pull source wired before instrument; port of TS ArpeggioDeviceProcessor; enhanced version planned in plans/arpeggio-enhanced.md", src: "crates/stock-devices/device-arpeggio/src/lib.rs:1-5"}
+      - {id: device-note-filter, note: "pass notes within a pitch range, then transpose or set key"}
+      - {id: device-pitch, note: "shift note pitch by octaves, semitones, cents (pull source)"}
+      - {id: device-scale-matrix, note: "snap notes to nearest scale key; own scale or project key via follow"}
+      - {id: device-spielwerk, note: "SCRIPTABLE MIDI effect (user JS generator transforms notes); generator runs once per pulled range", src: "crates/stock-devices/device-spielwerk/src/lib.rs:1-5"}
+      - {id: device-velocity, note: "rewrite velocity: magnet, seeded random jitter, offset, mix"}
+      - {id: device-wclap-midi, note: "hosts a CLAP note effect via host_wclap_*"}
+      - {id: device-zeitgeist, note: "groove or time-warp of note positions through a groove pointer"}
+    in_schema_without_stock_crate: [MIDIOutputDeviceBox (send MIDI to hardware), AudioSinkDeviceBox, Modular boxes, stereo-split and frequency-split effect composites]
+    src_schema_extra: [packages/studio/forge-boxes/src/schema/devices/index.ts, packages/studio/adapters/src/BoxAdapters.ts:19-60, packages/studio/scripting/src/Api.ts:845-925]
+    scripted_devices: "Spielwerk is the MIDI effect, Apparat the instrument, Werkstatt the audio effect. User JS runs in the AudioWorklet; scripts declare params with directives (@param, @sample, @sidechain, @group, @collection, @field, @stream, @view)."
+    src_scripted: [crates/stock-devices/device-werkstatt/src/lib.rs:1-4, plans/script-views.md:15]
+  wclap:
+    what: "WebCLAP: CLAP plugins compiled to WebAssembly, loaded from a URL or from a locally imported bundle (opfs: url). Three device boxes (effect, instrument, midi). A local bundle travels inside a project export. Parameters, GUI relay and state saving go through EngineCommands wclap* methods."
+    src: [crates/stock-devices/device-wclap/src/lib.rs, packages/studio/core/src/project/ProjectBundle.ts:42-50, packages/studio/adapters/src/protocols.ts:70-82, plans/protracker-wclap.md:1-12]
+
+project_format:
+  native_file:
+    project_od: "project.od is ProjectSkeleton bytes: magic 0x4F50454E, format version, length, serialized box graph. Opaque binary, schema-tolerant (unknown fields skipped)."
+    src: [packages/studio/adapters/src/project/ProjectSkeleton.ts:36,99-108, packages/lib/box/src/serializer.ts:5-36]
+    on_disk_layout_opfs: "projects/v1/<uuid>/{project.od, meta.json, image.bin (cover)}. Samples at samples/v2/<uuid>/{audio.wav, peaks.bin, meta.json}. Soundfonts and wclap bundles have their own folders."
+    src_layout: [packages/studio/core/src/project/ProjectPaths.ts:3-10, packages/studio/core/src/samples/SampleStorage.ts:19-35]
+    bundle_export: "ProjectBundle encodes a ZIP (jszip): version file with value 1, uuid, project.od, meta.json, optional cover, samples/<uuid>/..., soundfonts/<uuid>/..., wclap/<id>/... Decode restores into storage."
+    src_bundle: packages/studio/core/src/project/ProjectBundle.ts:19-80
+    presets: ".odp preset files via PresetBundle."
+    src_odp: packages/studio/core/src/opfs/AssetCache.ts:10
+    audio_files_in_graph: "AudioFileBox is a resource box (preserved UUID, content addressed) with file-name and start/end seconds; real audio lives in OPFS keyed by that UUID. The graph stays small and assets are separate."
+    src_audiofile: packages/studio/forge-boxes/src/schema/std/AudioFileBox.ts:5-22
+    meta: "ProjectMeta: name, description, tags, created, modified, notepad. Cover optional."
+    src_meta: packages/studio/core/src/project/Project.md:1-20
+  interchange:
+    dawproject: "lib-dawproject holds the DAWproject schema classes (defaults.ts, XML via lib-xml); studio-core/dawproject has DawProjectImporter, Exporter, Service plus DeviceIO and BuiltinDevices mapping, with tempo and device tests. DAWproject is the Bitwig-led open interchange format."
+    src: [packages/lib/dawproject/src/defaults.ts, packages/studio/core/src/dawproject/DawProject.ts:1-70, introduction.md (lib-dawproject row)]
+    midi: "Standard MIDI file decode in lib-midi; note MIDI export exists (NoteMidiExport.ts)."
+    src_midi: [introduction.md (lib-midi), packages/studio/core/src/project/NoteMidiExport.ts]
+    audio_export: "AudioBounce, MixdownSection, OpusEncoder, ffmpeg wrapper (peer dependency @ffmpeg/ffmpeg), WAV via lib-dsp."
+    src_audio: [packages/studio/core/src/AudioBounce.ts, packages/studio/core/src/OpusEncoder.ts, introduction.md (studio-core)]
+  samples_and_loading:
+    manager: "GlobalSampleLoaderManager: per-UUID loaders with ref counts, a decoded cache (AudioData plus Peaks plus meta) and pending-load dedupe. SampleStorage reads audio.wav, peaks.bin, meta.json from OPFS through a worker. Corrupt or empty peaks.bin is regenerated."
+    src: [packages/studio/core/src/samples/GlobalSampleLoaderManager.ts:1-40, packages/studio/core/src/samples/SampleStorage.ts:26-90]
+    decode_policy: "Samples are fully decoded to planar float frames (AudioData), held in memory, then copied into engine memory. No streaming from disk was found."
+    src_decode: [packages/studio/core-wasm/src/processor.ts:296-326, packages/studio/core/src/samples/DefaultSampleLoader.ts:12-36]
+    peaks: "Multi-stage peak pyramid (stage shift = power of two units per peak, nearest(unitsPerPixel) picks a stage), stored as Float16 packed ints, generated in a worker (SamplePeakWorker) and painted by PeaksPainter."
+    src_peaks: [packages/lib/fusion/src/peaks/Peaks.ts:15-40, packages/lib/fusion/src/peaks/SamplePeakWorker.ts]
+    garbage_and_cache: "AssetCache scans OPFS for assets, tells in-use from unused, and can delete cached library samples and soundfonts no project uses; an OPFS quota page is planned and partly built."
+    src_gc: [packages/studio/core/src/opfs/AssetCache.ts:11-40, plans/opfs-quota.md:105-125, packages/studio/core/src/samples/SampleGarbage.ts]
+    sources: "Stock sample library from a server (assets.opendaw.studio), imports, recordings. Cloud backends (Dropbox, Nextcloud) via studio-core/cloud for project and sample sync."
+    src_sources: [introduction.md (studio-core), assets.opendaw.studio]
+    p2p_fallback: "ChainedSampleProvider falls back local storage then peers (WebRTC) for assets in collab rooms."
+    src_p2p: [introduction.md (studio-p2p), packages/studio/p2p/src/ChainedSampleProvider.ts]
+
+scale_and_performance:
+  facts:
+    - fact: "Peak pyramid stored beside each sample; waveform drawing never touches raw frames."
+      src: packages/lib/fusion/src/peaks/Peaks.ts:15-40
+    - fact: "Heavy work off the main thread: OPFS worker, peak worker, BPM and material analysis workers, ONNX inference worker (lib-inference), script worker, stretch-wasm analysis module."
+      src: [introduction.md (Runtime Topology), packages/lib/inference]
+    - fact: "Engine render is allocation free; buffers sized in reconcile, fixed voice pools, side modules about 2 KB; release profile size-optimised with hot DSP crates at opt-level 3."
+      src: [introduction.md (Rust workspace), plans/delay-compensation.md:112]
+    - fact: "Update stream is delta based and byte-splices large bytes fields, so big edits do not resend full state."
+      src: packages/lib/box/src/sync-source.ts:55-72
+    - fact: "Undo optimizes update lists; selection and view state excluded from history via predicate."
+      src: packages/lib/box/src/editing.ts:22,63-84
+    - fact: "Per-device benchmark page renders each device offline with the real engine and reports marginal cost per quantum; JIT warmup first."
+      src: docs/performance.md:1-20
+    - fact: "Micro-optimisations logged: bitmask ring buffers instead of modulo, hoisted lookup tables, no per-block allocation in hot paths, AnimationFrame throttled to about 60 fps. docs/performance.md is a changelog of these, not a scaling guide."
+      src: docs/performance.md:21-105
+    - fact: "A DSP load measurement plan exists."
+      src: plans/dsp-load-measurement.md
+    - fact: "Engine heap meter broadcast and UI footer item shipped; engine starts at 16 MB and grows."
+      src: plans/wasm-audio/memory-ceiling.md:36-42
+  known_ceilings:
+    - what: "Memory: all sample data is decoded into engine wasm memory. Out-of-memory is hit mostly while LOADING samples. A running engine that fails allocation traps; the worklet invalidates and the app offers restart. Plan: make per-asset allocation fallible so one asset goes silent instead of the engine dying."
+      src: plans/wasm-audio/memory-ceiling.md:25-70,100-108
+    - what: "Chrome per-process wasm address space is small on Android; N parallel projects or exports each hold an engine memory. Advice there: serialize exports, suspend background projects."
+      src: plans/wasm-audio/memory-ceiling.md:46-58,75-80
+    - what: "Large soundfonts (261 MB seen) are slow to read and zip for P2P transfer; concurrent peers multiply reads."
+      src: docs/live-collab-fixes.md:1-30
+    - what: "AudioWorklet construction can throw DataCloneError out of memory after importing a large mp3 (open triage entry, ChromeOS)."
+      src: docs/error-triage.md:62
+    - what: "OPFS quota: createWritable skews estimate; storage over 2 GB flagged red in the planned footer."
+      src: plans/opfs-quota.md:111-160
+    - what: "Compensation delay lines capped at 0.1 s."
+      src: plans/delay-compensation.md:155
+    - what: "Whole graph lives in main-thread memory and every edit validates affected boxes; no documented limit or benchmark for huge track counts was found (see unverified)."
+      src: packages/lib/box/src/graph.ts:96-134
+    - what: "No lazy loading of project regions or paged project file was found: project.od is read whole and the graph built eagerly."
+      src: [packages/studio/adapters/src/project/ProjectSkeleton.ts:99-120, packages/lib/box/src/graph.ts:587-660]
+
+collaboration_and_sync:
+  live_room:
+    model: "A Yjs doc mirrors the box graph (YMapper maps boxes and fields to Y.Maps; bytes via YBytes). Local transactions become Yjs ops, remote ops become graph transactions. Server is stock y-websocket (packages/server/yjs-server)."
+    src: [packages/studio/core/src/ysync/YSync.ts, packages/studio/core/src/ysync/YMapper.ts, packages/server/yjs-server/package.json:10-19]
+    core_problem: "Yjs converges documents but does not know graph invariants (pointers must resolve, exclusive targets, mandatory pointers, no cycles). Two valid edits can merge into an illegal graph."
+    src_problem: docs/live-collab-deterministic-reconcile.md:1-15
+    fix: "deterministicReconcile repairs violations as a pure function of the converged document (lowest-addressed incoming pointer wins on exclusive overflow; a mandatory pointer that must drop deletes its owning box). It runs only on the failure path and on room join, so peers converge. Documented limitation: repair edits are not written back into the Yjs doc, sound only while exclusive attachments are append only."
+    src_fix: docs/live-collab-deterministic-reconcile.md:17-60
+    tests: "Multi-peer harness with offline divergence and a 12-seed fuzz asserting convergence by BoxGraph.checksum."
+    src_tests: [docs/live-collab-deterministic-reconcile.md:35-48, packages/studio/core/src/ysync/YSyncCollab.test.ts, packages/studio/core/src/ysync/LiveRoomFuzz.test.ts]
+  rollback_invariant: "Every transaction end validates; failure applies recorded updates in reverse. Used for both local edits and remote batches."
+  src_rollback: docs/live-collab-conflict-resolve.md:1-45
+  p2p_assets: "studio-p2p moves samples, soundfonts, wclap bundles between peers over WebRTC data channels with chunking, backpressure and signaling (AssetSignaling, AssetServer, AssetPeerConnection). Known bug class: channel closing mid transfer."
+  src_p2p: [packages/studio/p2p/src, docs/live-collab-fixes.md]
+  sync_log: "Hash chained commit log (CommitType Init, Open, Updates, NewVersion; payload plus previous hash) with reader and writer; layout shared with Rust."
+  src_log: [packages/studio/core/src/sync-log/Commit.ts:6-25, packages/studio/core/src/sync-log/SyncLogWriter.ts]
+  more_plans: [plans/live-room-selections.md, plans/live-room-local-edits.md, plans/room-awareness.md]
+
+extension_surface:
+  honest_answer_on_command_api:
+    is_every_editor_action_a_serializable_command: "NO. There is no command registry or command bus. UI code mutates the project by calling imperative TS methods (ProjectApi, adapter methods, direct box.field.setValue) inside editing.modify(...). The caller, not the API, is responsible for wrapping in modify (a ProjectApi doc comment says so for duplicateNotes), and some ProjectApi methods write directly with no wrapper (setBpm)."
+    src: [packages/studio/core/src/project/ProjectApi.ts:142-150,748-770, packages/studio/core/src/project/Project.md]
+    what_is_serializable: "Every mutation, however it was invoked, ends as a list of 4 box-level Update records (new, delete, pointer, primitive) with old and new values. That stream is serializable, invertible, replayable, checksummable. It is a data-level log, not a semantic command log: there is no verb like 'create region on lane X', you get 'new AudioRegionBox with these fields' plus pointer updates."
+    src_updates: [packages/lib/box/src/updates.ts:7-50, packages/lib/box/src/sync-source.ts:55-80]
+    semantic_api_surface: "ProjectApi (about 800 lines) holds many named operations: createAnyInstrument, insertEffect, copyEffects, moveEffects, createNoteTrack, createAudioTrack, createAutomationTrack, createTimeStretchedRegion, createNoteRegion, createTrackRegion, createNoteEvent, quantiseNotes, deleteAudioUnit, wrapInstrumentIntoComposite and more. This is the closest thing to a verb set, but the methods take live box and adapter objects, not JSON, and many editor gestures live in UI code under packages/app/studio/src/ui instead."
+    src_api: packages/studio/core/src/project/ProjectApi.ts:182-770
+    keyboard_shortcuts: "Shortcuts are declarative definitions (key plus description) per context (regions, note editor, device panel, piano panel, common) validated by ShortcutValidator and bound to UI handlers. They are names plus keys, not an action registry an agent can invoke."
+    src_shortcuts: [packages/app/studio/src/ui/shortcuts/RegionsShortcuts.ts:1-20, packages/lib/dom/src/shortcut-manager.ts]
+    engine_commands: "EngineCommands is a typed RPC to the audio thread (play, stop, setPosition, clip schedule, note signal, etc.). Transport and engine control only, not project editing."
+    src_engine_cmds: packages/studio/adapters/src/protocols.ts:46-90
+  scripting_api:
+    what: "Closest AI-drivable surface. User JS or TS runs in a worker with global openDAW; it builds a new project (openDAW.newProject) or loads the open one (await openDAW.getProject()), edits through typed facades (project.bpm, addInstrumentUnit, noteTracks[0].addRegion, addEvent, device parameters), then project.openInStudio() hands it back. Also addSample, listSamples, renderMixdown, showInfo, saveFile."
+    src: [packages/studio/scripting/README.md:1-22, packages/studio/scripting/docs/index.md:1-20, packages/studio/scripting/src/Api.ts:2889-3023, packages/studio/scripting/src/ScriptHostProtocol.ts:6-18]
+    how_it_works: "Facades are thin wrappers over a real BoxGraph (ProjectSkeleton) inside the worker; every getter reads a field and every setter writes one. Guard validates every write against schema constraints (clamps ranges, throws on bad enum or type). A parity test asserts every automatable field of every device is reachable through the facade."
+    src_how: [packages/studio/scripting/README.md:8-18, packages/studio/scripting/src/impl/Guard.ts, packages/studio/scripting/src/test]
+    apply_path: "The script collects UpdateTasks (forward update list) plus the graph checksum it started from. The host compares that checksum with the live project; if the project changed meanwhile it refuses ('Run it again'); otherwise it replays the tasks inside one editing.modify, so the whole script is ONE undo step."
+    src_apply: [packages/studio/scripting/src/ScriptHostProtocol.ts:8-10, packages/app/studio/src/ui/pages/CodeEditorPage.tsx:81-92, packages/lib/box/src/sync-target.ts:12-20]
+    gaps: "Not covered: modular audio effects, neural amp models, recording capture settings, MIDI controller mappings, UI state. A create script replaces the open project instead of editing it."
+    src_gaps: packages/studio/scripting/README.md:19-22
+    typings: "api.declaration.d.ts is generated from Api.ts so Monaco gets completions; also a good LLM prompt context."
+    src_typings: [packages/studio/scripting/README.md:8-10, introduction.md (Generated Code)]
+  sdk_and_headless:
+    sdk: "@opendaw/studio-sdk is a meta package (no code) pulling lib-*, studio-boxes, adapters, core, core-wasm so another app can embed the engine; WasmEngine.install and ensureReady, offline render and latency calibration (RoundTrip) are documented."
+    src: [packages/studio/sdk/README.md:1-60, packages/studio/sdk/package.json]
+    headless: "README links external repos openDAW-headless and a fork with more docs; their contents are NOT in this clone."
+    src_headless: [README.md:178-180, introduction.md (studio-sdk)]
+  other_hooks:
+    - "Project profile and storage APIs plus ProjectBundle encode/decode for file-level automation. src: packages/studio/core/src/project/ProjectBundle.ts"
+    - "OfflineEngineRenderer for headless rendering (mixdown, stems). src: packages/studio/core/src/OfflineEngineRenderer.ts"
+    - "docs/error-triage.md:86 mentions read-only console commands; not investigated."
+  mcp_or_cli: "None found in this clone. No MCP server, no CLI that edits projects, no JSON command schema."
+  implication_for_us: "For an AI or CLI driven DAW, do not copy their model of imperative methods. Take their box-level Update stream (serializable, invertible, checksummed) as the bottom layer, and define our own semantic command layer on top that compiles to it, so every editor action is a serializable command by construction."
+
+naming_glossary:
+  note: "we_call_it is a PROPOSAL for consistent plain DAW names in our agents and docs."
+  terms:
+    - {theirs: BoxGraph, meaning: "whole project object graph", we_call_it: project graph, src: "packages/lib/box/src/graph.ts:52"}
+    - {theirs: Box, meaning: "typed record node", we_call_it: node, src: "packages/lib/box/src/box.ts:50"}
+    - {theirs: Field, meaning: "addressed slot in a box", we_call_it: property, src: "packages/lib/box/src/field.ts"}
+    - {theirs: "Pointer, PointerHub, Pointers enum", meaning: "typed edge and its receiving side", we_call_it: reference, src: "packages/lib/box/src/pointer.ts"}
+    - {theirs: Address, meaning: "box uuid plus field key path", we_call_it: path, src: "packages/lib/box/src/address.ts"}
+    - {theirs: "Update (new, delete, pointer, primitive)", meaning: "one low level graph mutation", we_call_it: patch op, src: "packages/lib/box/src/updates.ts:10"}
+    - {theirs: "BoxEditing.modify and mark", meaning: "transaction plus undo step", we_call_it: edit transaction and undo step, src: "packages/lib/box/src/editing.ts:240"}
+    - {theirs: "Adapter (BoxAdapter)", meaning: "behavior wrapper around a box for UI and engine", we_call_it: view model, src: "packages/studio/adapters/src/BoxAdapter.ts"}
+    - {theirs: RootBox, meaning: "project root", we_call_it: project root, src: "packages/studio/forge-boxes/src/schema/std/RootBox.ts"}
+    - {theirs: TimelineBox, meaning: "bpm, signature, loop area, markers holder", we_call_it: timeline settings, src: "packages/studio/forge-boxes/src/schema/std/timeline/TimelineBox.ts"}
+    - {theirs: "AudioUnit (AudioUnitBox)", meaning: "channel strip: input instrument or bus, fx chains, lanes, fader, pan, sends, output", we_call_it: channel, src: "packages/studio/forge-boxes/src/schema/std/AudioUnitBox.ts"}
+    - {theirs: "AudioUnitType instrument", meaning: "channel with an instrument", we_call_it: instrument channel, src: "packages/studio/enums/src/AudioUnitType.ts:2"}
+    - {theirs: "AudioUnitType bus", meaning: "group channel summing others", we_call_it: group bus, src: "packages/studio/enums/src/AudioUnitType.ts:3"}
+    - {theirs: "AudioUnitType aux", meaning: "send and return channel", we_call_it: return bus, src: "packages/studio/enums/src/AudioUnitType.ts:4"}
+    - {theirs: "AudioUnitType output", meaning: "master", we_call_it: master channel, src: "packages/studio/enums/src/AudioUnitType.ts:5"}
+    - {theirs: AuxSendBox, meaning: "send level from a unit to an aux unit", we_call_it: send, src: "packages/studio/adapters/src/BoxAdapters.ts (AuxSendBox import)"}
+    - {theirs: TrackBox, meaning: "one lane inside a unit holding regions (type notes, audio, value)", we_call_it: lane, src: "packages/studio/forge-boxes/src/schema/std/timeline/TrackBox.ts"}
+    - {theirs: "TrackType.Value", meaning: "lane of parameter values", we_call_it: automation lane, src: "packages/studio/adapters/src/timeline/TrackType.ts:3"}
+    - {theirs: "Region (NoteRegionBox, AudioRegionBox, ValueRegionBox)", meaning: "loopable timeline block", we_call_it: clip (timeline), src: "packages/studio/forge-boxes/src/schema/std/timeline/NoteRegionBox.ts"}
+    - {theirs: "Clip (NoteClipBox, AudioClipBox, ValueClipBox)", meaning: "launchable session-view slot", we_call_it: launch clip, src: "packages/studio/forge-boxes/src/schema/std/timeline/ClipTriggerFields.ts"}
+    - {theirs: "EventCollection (NoteEventCollectionBox, ValueEventCollectionBox)", meaning: "shared content container of events a region plays", we_call_it: pattern, src: "packages/studio/forge-boxes/src/schema/std/timeline/NoteEventCollectionBox.ts"}
+    - {theirs: NoteEventBox, meaning: "single note with position, duration, pitch, velocity, chance, cent", we_call_it: note, src: "packages/studio/forge-boxes/src/schema/std/timeline/NoteEventBox.ts"}
+    - {theirs: "ValueEventBox, ValueEventCurveBox", meaning: "automation breakpoint and curve", we_call_it: automation point, src: "packages/studio/forge-boxes/src/schema/std/timeline/ValueEventBox.ts"}
+    - {theirs: MarkerBox, meaning: "timeline marker", we_call_it: marker, src: "packages/studio/forge-boxes/src/schema/std/timeline/MarkerBox.ts"}
+    - {theirs: SignatureEventBox, meaning: "time signature change", we_call_it: meter change, src: "packages/studio/forge-boxes/src/schema/std/timeline/SignatureEventBox.ts"}
+    - {theirs: "KeyEventBox, ChordEventBox (harmony track)", meaning: "key and chord context", we_call_it: key and chord entry, src: "packages/studio/forge-boxes/src/schema/std/timeline/KeyEventBox.ts"}
+    - {theirs: "PPQN (ppqn)", meaning: "pulses per quarter, 960 per quarter", we_call_it: ticks (960 per quarter), src: "packages/lib/dsp/src/ppqn.ts:13"}
+    - {theirs: "Pulse, p0..p1", meaning: "timeline position range of a block", we_call_it: tick range, src: "crates/transport/src/transport.rs:188"}
+    - {theirs: Quantum, meaning: "128 frame render slice", we_call_it: render quantum, src: "crates/transport/src/transport.rs:14"}
+    - {theirs: Block, meaning: "sub-slice of a quantum with constant tempo and continuous time", we_call_it: process block, src: "crates/engine-env/src/process_info.rs"}
+    - {theirs: Device, meaning: "instrument or effect on a unit", we_call_it: device (instrument, audio fx, midi fx), src: "packages/studio/adapters/src/DeviceAdapter.ts"}
+    - {theirs: "InstrumentHost, MIDIEffectHost, AudioEffectHost", meaning: "slots in a unit where devices attach", we_call_it: instrument slot, midi fx chain, audio fx chain, src: "packages/studio/forge-boxes/src/schema/std/AudioUnitBox.ts:24-45"}
+    - {theirs: Tape, meaning: "instrument that plays audio regions", we_call_it: audio player instrument, src: "packages/studio/forge-boxes/src/schema/devices/instruments/TapeDeviceBox.ts"}
+    - {theirs: Playfield, meaning: "drum-pad style sampler with slots", we_call_it: drum sampler, src: "packages/studio/forge-boxes/src/schema/devices/instruments/PlayfieldDeviceBox.ts"}
+    - {theirs: "Composite (Instrument, AudioEffect, Midi)", meaning: "container device hosting several child devices, summed or stacked", we_call_it: layer rack, src: "plans/instrument-composite.md:1-6"}
+    - {theirs: "Modular (ModularBox, modules)", meaning: "patchable modular graph", we_call_it: modular rack, src: "packages/studio/forge-boxes/src/schema/devices/modular.ts"}
+    - {theirs: "Werkstatt, Apparat, Spielwerk", meaning: "scripted audio fx, instrument, midi fx", we_call_it: script fx, script instrument, script midi fx, src: "crates/stock-devices/device-werkstatt/src/lib.rs:1"}
+    - {theirs: "Zeitgeist, Groove boxes", meaning: "groove template warping time", we_call_it: groove (swing), src: "crates/stock-devices/device-zeitgeist/src/lib.rs:1"}
+    - {theirs: "Revamp, Vaporisateur, Nano, Korpus, Neon, Tubular, Cubed, Tidal, Maximizer", meaning: "stock device brand names (EQ, subtractive synth, sampler, physical model, phase distortion synth, FM synth, 303 bass, auto pan, limiter)", we_call_it: plain descriptive names (EQ, subtractive synth, sampler, ...), src: "crates/stock-devices"}
+    - {theirs: "Capture (CaptureBox)", meaning: "record arming and input source of a unit", we_call_it: record input, src: "packages/studio/forge-boxes/src/schema/std/CaptureBox.ts"}
+    - {theirs: "Sample, AudioFileBox", meaning: "audio asset", we_call_it: audio file asset, src: "packages/studio/forge-boxes/src/schema/std/AudioFileBox.ts"}
+    - {theirs: "Warp markers, TransientMarker, stretch boxes", meaning: "time-stretch anchors, onsets, stretch mode", we_call_it: warp markers, onsets, stretch mode, src: "packages/studio/forge-boxes/src/schema/std/WarpMarkerBox.ts"}
+    - {theirs: "Freeze (AudioUnitFreeze, frozen.rs)", meaning: "render unit to audio and bypass chain", we_call_it: freeze track, src: "packages/studio/core/src/AudioUnitFreeze.ts; crates/engine/src/frozen.rs"}
+    - {theirs: "Sink (AudioSinkDeviceBox)", meaning: "audio tap or output device", we_call_it: audio tap, src: "plans/audio-sink.md"}
+    - {theirs: "ProjectProfile", meaning: "project plus meta plus cover", we_call_it: project entry, src: "packages/studio/core/src/project/ProjectProfile.ts"}
+    - {theirs: ".od, .odp", meaning: "project file, preset file", we_call_it: our own extensions, src: "packages/studio/core/src/project/ProjectPaths.ts:4"}
+    - {theirs: OPFS, meaning: "browser private file system used as project and asset store", we_call_it: local store, src: "packages/studio/core/src/samples/SampleStorage.ts:19"}
+    - {theirs: LiveStream, meaning: "audio-to-UI lock free telemetry", we_call_it: telemetry stream, src: "packages/lib/fusion/src/live-stream"}
+    - {theirs: WCLAP, meaning: "CLAP plugins as wasm", we_call_it: web plugin (CLAP wasm), src: "crates/stock-devices/device-wclap"}
+    - {theirs: "PIC side module", meaning: "device wasm linked into engine memory", we_call_it: device module, src: "introduction.md (Compiled artifacts)"}
+
+conventions:
+  note: "Only their rules that matter when reading or borrowing. Ours differ where flagged."
+  theirs:
+    - rule: "Absolutely minimal comments: rare, one short line, never design rationale (belongs in commit message)."
+      vs_ours: "Ours allow 1 to 3 lines explaining why. Their source is nonetheless comment heavy in places (plans, WASM CONTRACT notes)."
+      src: CLAUDE.md:5
+    - rule: "No blank lines inside method bodies; compact destructuring; no single-letter lambda names."
+      vs_ours: "Not in our rules."
+      src: CLAUDE.md:6-8
+    - rule: "Use lib-std types: Optional<T>, Nullable<T>, isDefined, isAbsent; never write inline null or undefined unions; never use falsy checks for null."
+      vs_ours: "Ours bans any and console.log; no equivalent type vocabulary mandated."
+      src: CLAUDE.md:9-16
+    - rule: "No definite assignment, no as any, no try/catch (use tryCatch from lib-std), no 'in' type checks."
+      vs_ours: "We ban any too; try/catch not banned by us."
+      src: CLAUDE.md:17-21
+    - rule: "UUID.Bytes must use UUID.newSet or UUID.newMap (sorted), not Set or Map."
+      vs_ours: "Project specific."
+      src: CLAUDE.md:22
+    - rule: "Option<T> for fallible returns; no ad hoc structural types; complex field initialisers in constructor; tsc with --noEmit."
+      vs_ours: "Not in our rules."
+      src: CLAUDE.md:23-26
+    - rule: "Use .hidden CSS class instead of style.display."
+      vs_ours: "We forbid inline styles entirely (Tailwind only); they use Sass."
+      src: CLAUDE.md:12
+    - rule: "Workflow: analyze bugs and propose fixes, wait for approval before editing; never commit unless explicitly asked; never Write over existing files, always Edit."
+      vs_ours: "We commit and push branches on request; no per-edit approval."
+      src: CLAUDE.md:28-32
+    - rule: "AGENTS.md is only an auto-generated turborepo block telling agents to read the installed turbo docs before changing turbo config."
+      vs_ours: "No equivalent."
+      src: AGENTS.md:1-9
+    - rule: "Contribution policy: small focused PRs, contributor must understand every line, AI process documented in /plans, schema field keys append only, WASM CONTRACT comments on shared formats."
+      vs_ours: "Ours: fewer bigger commits, one PR per initiative."
+      src: [README.md (Looking for Contributors), packages/studio/enums/src/Pointers.ts:62]
+  other_conventions_seen: "Terminable and Subscription lifecycle objects everywhere, Option and Attempt instead of exceptions for fallible results, observable values and notifiers instead of a UI framework, no virtual DOM."
+  src_other: [introduction.md (lib-std row, lib-jsx row)]
+
+lessons:
+  - tag: borrow
+    item: "One typed object graph for the entire project, with per-field integer keys as persisted ids and deprecated-not-removed fields."
+    why: "Forward compatible files; one schema for UI, engine and collab."
+    src: [packages/lib/box/src/serializer.ts:11-36, packages/studio/forge-boxes/src/schema/std/timeline/NoteRegionBox.ts:14]
+  - tag: borrow
+    item: "Everything edit-related reduces to 4 invertible update records with old and new values; transactions validate at end and roll back by inverse."
+    why: "Undo, redo, rollback, engine sync, collab and scripting all fall out of one mechanism."
+    src: [packages/lib/box/src/updates.ts:7-50, docs/live-collab-conflict-resolve.md:1-45]
+  - tag: borrow
+    item: "Graph checksum compared across main thread, engine and script origin."
+    why: "Cheap proof that mirrors have not diverged; also refuses stale script apply."
+    src: [packages/lib/box/src/graph.ts:251, packages/app/studio/src/ui/pages/CodeEditorPage.tsx:85]
+  - tag: borrow
+    item: "Whole script applied as one undo step guarded by an origin checksum."
+    why: "Safe pattern for AI or CLI batch edits: compute off-thread against a snapshot, apply atomically only if the base is unchanged."
+    src: [packages/studio/scripting/src/ScriptHostProtocol.ts:8-10, packages/app/studio/src/ui/pages/CodeEditorPage.tsx:81-92]
+  - tag: borrow
+    item: "Plugin delay compensation by delay lines at junction inputs computed in one topological pass, zero cost when latency is zero."
+    why: "No graph rewiring, bit-identical for simple projects, handles sidechains and automation alignment."
+    src: plans/delay-compensation.md:21-53
+  - tag: borrow
+    item: "Selection and view state stored as boxes but excluded from history by predicate; unmarked edits fold into the next marked step."
+    why: "Avoids phantom undo steps from selection changes while keeping state syncable."
+    src: [packages/lib/box/src/editing.ts:63-84,262-275, docs/graph.md]
+  - tag: borrow
+    item: "Allocation-free render, buffers sized at reconcile, fixed voice pools, side modules sharing one memory."
+    why: "Predictable audio thread; no GC pauses or surprise traps."
+    src: [plans/delay-compensation.md:112, crates/stock-devices/device-nano/src/lib.rs:25]
+  - tag: rethink
+    item: "Imperative ProjectApi plus direct field writes as the editing surface, with the caller expected to wrap in modify."
+    why: "Not serializable, no uniform undo wrapping, not drivable by an agent. We want a semantic command layer that compiles to patch ops."
+    src: packages/studio/core/src/project/ProjectApi.ts:142-150,748-770
+  - tag: avoid
+    item: "Duplicating every device in TS and Rust and requiring float-for-float parity between them."
+    why: "Doubles the work and creates a hand-maintained contract (about 70 WASM CONTRACT markers). Pick one DSP implementation."
+    src: [introduction.md (dsp row), crates/stock-devices/device-delay/src/lib.rs:1-3]
+  - tag: avoid
+    item: "Decoding all audio fully into engine linear memory with no streaming and (so far) no fallible allocation."
+    why: "Out-of-memory during loading is their top documented failure; the engine traps and must restart."
+    src: [plans/wasm-audio/memory-ceiling.md:25-70, packages/studio/core-wasm/src/processor.ts:296-326]
+  - tag: rethink
+    item: "CRDT (Yjs) over a graph with referential invariants."
+    why: "They needed a custom deterministic reconcile with a documented limitation. If we collaborate, decide the conflict model first."
+    src: docs/live-collab-deterministic-reconcile.md:1-60
+  - tag: avoid
+    item: "Five-place change to add one device (schema, adapter, factory, Rust crate, build list) and gitignored generated code that breaks fresh clones until a full build."
+    why: "High friction for contributors and agents; generate more from one device descriptor."
+    src: [introduction.md (Where To Start Reading), introduction.md (Generated Code)]
+  - tag: borrow
+    item: "Multi-stage peak pyramid stored beside each asset, regenerated if corrupt, produced in a worker."
+    why: "Fast waveform drawing at any zoom without touching audio data."
+    src: [packages/lib/fusion/src/peaks/Peaks.ts:15-40, packages/studio/core/src/samples/SampleStorage.ts:80-90]
+
+unverified:
+  - "No benchmark or documented limit for very large projects (hundreds of tracks, hundreds of thousands of notes); graph validation cost per transaction not measured in the code read."
+  - "Whether any streaming or partial loading of long audio exists anywhere (searched docs and loaders, found only full decode); engine-side sample requests (Route F, drainResourceRequests) not read in detail."
+  - "Exact SharedArrayBuffer usage today: sdk README and flow diagram say SAB plus COOP/COEP, code says non-shared engine memory; controlFlags is SAB. Which parts still require cross-origin isolation is unconfirmed."
+  - "Whether openDAW-headless (external repo) or console commands (docs/error-triage.md:86 mentions read-only console commands) expose any command API; not in this clone."
+  - "Extent to which UI-only gestures bypass ProjectApi (the app tree packages/app/studio/src/ui was only sampled, not audited)."
+  - "How device presets are named and versioned in the cloud catalog (FactoryCatalog) and the exact .odp binary layout."
+  - "Ephemeral box flag semantics (BoxSchema.ephemeral) and the modular synth runtime state (plans say modular effects are inaudible in the engine)."
+  - "AGPL implications for derived work were not assessed legally; only the license header was read."
+  - "TS engine (core-processors) parity status versus the WASM engine beyond the statement that WASM is default."
+  - "Rust engine lib.rs (4212 lines) reconcile and device-instantiation code was not read beyond comments; claims about reconcile come from the flow diagram labels and plans."

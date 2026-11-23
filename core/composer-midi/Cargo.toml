@@ -1,0 +1,10 @@
+[package]
+name = "composer-midi"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[dependencies]
+composer-model = { path = "../composer-model" }
+composer-commands = { path = "../composer-commands" }

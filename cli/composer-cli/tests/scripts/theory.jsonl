@@ -1,0 +1,8 @@
+# D35 theory reads: pure lookups, the project hash never moves.
+{"method":"session.new","params":{"name":"Theory","id":"000000000000000000000000000000f4"}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"theory.scale","params":{"root":9,"scale":"minor"},"expect":{"root":9,"scale":"minor","pitch_classes":[9,11,0,2,4,5,7]}}
+{"method":"theory.chords","params":{"key":{"root":0,"scale":"major"}},"expect":{"root_name":"C","octave":4}}
+{"method":"theory.pitch","params":{"root":0,"scale":"major","pitch":61},"expect":{"pitch":61,"in_key":false,"degree":null,"nearest":60}}
+{"method":"theory.pitch","params":{"root":12,"scale":"major","pitch":60},"expect_error":{"data":{"code":"invalid_params"}}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}

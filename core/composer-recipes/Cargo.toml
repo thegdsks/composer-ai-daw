@@ -1,0 +1,13 @@
+[package]
+name = "composer-recipes"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[dependencies]
+composer-commands = { path = "../composer-commands" }
+composer-model = { path = "../composer-model" }
+composer-theory = { path = "../composer-theory" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

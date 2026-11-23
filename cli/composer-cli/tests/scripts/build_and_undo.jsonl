@@ -1,0 +1,12 @@
+# Build a small piece, then walk it back with undo and forward with redo.
+# "expect" is a subset match on the result; "@any" only requires presence.
+{"method":"session.new","params":{"name":"Demo","id":"000000000000000000000000000000f0"},"expect":{"undo_depth":0,"state_hash":"@any"}}
+{"method":"command.apply","params":{"command":{"command":"set_tempo","tick":0,"mbpm":90000}},"expect":{"undo_depth":1}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a1","name":"Piano","kind":"instrument","index":null}},"expect":{"undo_depth":2,"undo_label":"add_track"}}
+{"method":"command.group","params":{"label":"first bar","commands":[{"command":"add_region","id":"000000000000000000000000000000b1","track":"000000000000000000000000000000a1","start":0,"length":3840,"kind":"midi"},{"command":"add_note","id":"000000000000000000000000000000c1","region":"000000000000000000000000000000b1","pitch":60,"velocity":100,"start":0,"duration":960},{"command":"add_note","id":"000000000000000000000000000000c2","region":"000000000000000000000000000000b1","pitch":64,"velocity":90,"start":960,"duration":960}]},"expect":{"undo_depth":3,"undo_label":"first bar"}}
+{"method":"state.hash","expect":{"state_hash":"13c872d19029c7ea"}}
+{"method":"undo","expect":{"applied":true,"undo_depth":2}}
+{"method":"state.hash","expect":{"state_hash":"083e58d0313578ac"}}
+{"method":"redo","expect":{"applied":true,"undo_depth":3}}
+{"method":"state.hash","expect":{"state_hash":"13c872d19029c7ea"}}
+{"method":"state.get","expect":{"state_hash":"13c872d19029c7ea"}}

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Composer audio spike</title>
+</head>
+<body>
+  <h1>Composer audio spike</h1>
+  <p>Rust engine in WebAssembly inside an AudioWorklet, 128 frame quanta.</p>
+  <button id="start" type="button">Start</button>
+  <button id="note-on" type="button" disabled>Note on (track 0, A4)</button>
+  <button id="note-off" type="button" disabled>Note off</button>
+  <button id="add-note" type="button" disabled>Add note (wasm editor)</button>
+  <pre id="editor-status" aria-live="polite">editor idle</pre>
+  <pre id="status" aria-live="polite">not started</pre>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,868 @@
+# Device system build plan for the composer engine (R05). Executable by parallel agents, same shape as notes/ui-plan.yaml.
+# Status: proposed. The DX decision placeholders become real D numbers in notes/decisions.yaml before any core change.
+# Facts about the reference come only from notes/ref-opendaw-devices.yaml (and the refs notes it builds on).
+# No reference code was read by the author of this plan beyond what those notes record.
+meta:
+  id: R05
+  date: 2026-11-23
+  author_lane: research
+  inputs:
+    - CLAUDE.md
+    - notes/ref-opendaw-devices.yaml
+    - notes/ref-opendaw.yaml
+    - notes/ref-opendaw-ui.yaml
+    - notes/ref-webclap.yaml
+    - notes/ref-clap-host.yaml
+    - notes/decisions.yaml (D9, D12, D14, D19, D26, D29, D34, D36, D37, D40 to D44)
+    - notes/ui-plan.yaml (shape, U task ids referenced only for UI hooks)
+    - core/composer-engine (math.rs rules, automation.rs CONTROL_PERIOD, mix.rs master bus, tests/no_alloc.rs)
+  validity_rule: "needs lists only DV ids from this file. external_needs lists only T ids from notes/tasks.yaml. decides lists DX placeholders from this file."
+
+owner_goal: "A device system like the reference stock devices: instruments, audio effects, MIDI effects, hosting later. Same in the browser and native, bit for bit, no allocation while rendering, every edit a command."
+
+what_exists_today:
+  - "Per track mix (volume, pan, mute, solo, reverb send) and a built in master reverb (D14, D26). This is a fixed chain, not a device chain."
+  - "Built in voices and a sampler bank with SF2 and SFZ zones (D29, D34, D37). Soundfont playback therefore exists, as a track sound, not as a device node."
+  - "Automation lanes for four targets (master volume, track volume, pan, reverb send) evaluated every 32 frames from the absolute frame (D36)."
+  - "Audio clips offline only (D40 to D42). Browser playback of clips is a known gap."
+  - "Engine math uses only add, multiply and floor so native and wasm agree (composer-engine math.rs)."
+  - "A no allocation test and a bench with env budgets (core/composer-engine/tests/no_alloc.rs, bench/budgets.env)."
+
+principles:
+  - "One engine, three clients: every device edit is a command; the device catalogue is data a client can read (types, parameters, ranges, units, defaults), so the UI panel, CLI and MCP tools are generated from it."
+  - "Model stays free of floats (D14 rule): each parameter is stored as an integer in a unit its spec declares (centi dB, permille, cents, microseconds, steps). The engine converts to f32 at the control period with a defined rule."
+  - "Deterministic DSP: only add, subtract, multiply, divide, floor and square root in audio code, plus our own kit functions built from those (sin, exp2, log2, tanh, pow, tan for filter coefficients). No std transcendentals, no fused multiply add, no fast math, no hash map iteration in audio order, fixed summation order."
+  - "No allocation in process: every buffer and ring is sized at setup from the sample rate and the project, state lives in preallocated blocks, large state is built in place, voices come from fixed pools."
+  - "Same code native and wasm: devices live in a core crate used by composer-render, composer-wasm and later the daemon. No per target DSP."
+  - "Parameter ids are stable small integers per device type, never reused; types have a schema version; defaults are skipped in JSON and in state_hash (D26 pattern), so projects without devices hash exactly as before."
+  - "Bypass is defined: clearing state on disable plus a short crossfade, so it depends on nothing in the past."
+  - "Latency is a first class number per device with alignment at sums, but wave A asserts zero latency everywhere until the first latent device ships."
+  - "Plain names in the UI (we_call_it), never brand names."
+  - "Licence safety: only public algorithms and our own tuning; nothing from GPL or commercial excluded sources (see licence_notes)."
+
+decisions_to_record_first:
+  note: "Placeholders. The orchestrator assigns real D numbers. Each needs an owner accept or an orchestrator accept in the task message, as D36 and D40 did."
+  items:
+    - id: DX1
+      topic: "device model: chains, slots and ids"
+      summary: "Track gets an ordered audio effect chain and, later, an instrument slot and an ordered MIDI effect chain. The master has an audio effect chain. A device is {id, type, enabled, params}. Ids are caller supplied like every other id (D9). Chains skip in JSON and hash while empty. Hash tag proposal 0xF7 for chains (0xF0 to 0xF6 are used in composer-model hash.rs, confirm at implementation)."
+      inspired_by: "ref-opendaw-devices framework.device_kinds"
+    - id: DX2
+      topic: "parameter schema and units"
+      summary: "Every device type exposes a static table: parameter id (u16), name, storage unit and scale, min, max, default, curve for UIs (linear, exp, bent), and kind (automatable, or setting that rebuilds state). Values are i32. A setting never appears in automation. A type has a version number. New parameters append."
+      inspired_by: "ref-opendaw-devices framework.parameters, settings_vs_parameters, parameter_ids (rethink: automation in real units, not unit space)"
+    - id: DX3
+      topic: "automation targets for device parameters"
+      summary: "AutomationTarget gains Device{owner (track id or master), device id, param id}. Points store real integer values in the parameter unit, evaluated at the 32 frame control period (D36 rule). Hold and linear curves interpolate in the integer unit space with the existing integer rule; smooth uses the existing curve. A set_param command and a lane never disagree: a lane wins while it has points."
+      inspired_by: "ref-opendaw-devices framework.automation_clock (rethink)"
+    - id: DX4
+      topic: "DSP determinism kit and device test rules"
+      summary: "New crate composer-dsp: pure functions and small structs (smoother, linear ramp, biquad from tan approximations, delay ring, peak follower, noise from a seeded 32 bit generator, half band oversampler, radix 2 FFT). Rules from principles. Every device ships a golden fingerprint test (native) and a wasm parity test (bytes of the first N seconds), plus tests that process never allocates."
+    - id: DX5
+      topic: "bypass and latency"
+      summary: "Disabling a device resets its state and crossfades dry and wet over 5 ms (frames from the sample rate, a constant in code). Devices report latency in frames at setup and on setting changes. The engine inserts alignment delay only at track sums and sends. Wave A has no latent devices and asserts latency 0."
+      inspired_by: "ref-opendaw-devices framework.bypass (rethink), framework.latency (borrow)"
+    - id: DX6
+      topic: "MIDI effect chain runtime"
+      summary: "MIDI effects transform a block of note events in tick positions before the instrument. Notes carry ids; a device rewrites on and replays the rewrite on off by id; out of range drops, never clamps; at equal tick off before on; chance is a hash of note identity and cycle, never a running random stream. State in preallocated tables with fixed capacities and a documented overflow rule (drop the new note on, pass its off)."
+      inspired_by: "ref-opendaw-devices framework.midi_events, devices.midi_effects"
+    - id: DX7
+      topic: "licence gate for devices"
+      summary: "Any device whose reference is GPL, commercial excluded, or fitted to a commercial plugin is built from public algorithms only, with our own constants and listening tests; no fixture renders from commercial plugins are kept in the repo. Plugins hosted at run time keep their own licence and are never bundled without a licence field."
+      inspired_by: "ref-opendaw-devices licence_summary"
+
+licence_notes:
+  stays_out:
+    - "Compressor as a port: the reference lists it as a ported plugin excluded from its commercial licence; upstream licence not verified (believed copyleft). Do not port or transcribe. DV21 designs our own from the public feed forward structure."
+    - "Tubular (six operator FM): derived from Dexed (GPL-3.0). Not planned."
+    - "Mastering (Matchering, GPL-3.0). Not planned."
+  own_tuning_only:
+    - "pd_synth: the reference constants are fitted to a commercial emulation. DV33 uses only the public concept (bent cosine phase map, knee moved by one amount, 8 stage envelopes) and our own tuning."
+    - "acid_bass: the reference is a transcription of an outside private project fitted to a commercial plugin. DV37 is optional and our own design."
+  public_algorithms_ok:
+    - "Freeverb (public domain), Dattorro plate (published), YIN and TD-PSOLA (published), Gardner partitioned convolution (published), Linkwitz-Riley crossover, RBJ biquad cookbook, PolyBLEP, half band oversampling, mid side width."
+  needs_review_before_shipping:
+    - "neural amp: NAM model file format and any inference core licence, and Tone3000 service terms (third party account, API terms). DV53 starts with this review."
+    - "web plugin catalogue: per plugin licence data. CLAP itself is MIT."
+    - "if the product goes AGPL (D2) the whole reference could be reused with notices; this plan stays clean room so both outcomes work."
+
+ranked_waves:
+  - {rank: 1, wave: A, why: "Without a chain model and parameter schema nothing else can land; the cheap effects prove it end to end (command, hash, render, wasm, UI, MCP) at low risk."}
+  - {rank: 2, wave: B, why: "Dynamics and EQ are what makes a mix usable; needs sidechain routing and latency alignment, so it follows the framework."}
+  - {rank: 3, wave: C, why: "Instruments change what the product sounds like (owner dislikes stock sounding voices); heavier model change (instrument slot) so it follows a proven chain."}
+  - {rank: 4, wave: D, why: "MIDI effects need the event chain runtime and the instrument slot; high value for beginners (arpeggio, transpose, chords)."}
+  - {rank: 5, wave: E, why: "Heavy DSP, scripting and hosting: each one is a project; WebCLAP hosting depends on the browser plugin work in ref-webclap and breaks bit for bit determinism by nature."}
+
+device_catalogue_we_call_it:
+  note: "Plain UI names proposed; ids in code are snake case."
+  rows:
+    - {id: stereo_tool, ui_name: "Stereo balance and width", wave: A}
+    - {id: stereo_delay, ui_name: "Echo", wave: A}
+    - {id: bit_crusher, ui_name: "Lo-fi crush", wave: A}
+    - {id: noise_gate, ui_name: "Gate", wave: A}
+    - {id: waveshaper, ui_name: "Distortion", wave: A}
+    - {id: auto_pan, ui_name: "Auto pan and tremolo", wave: A}
+    - {id: compressor, ui_name: "Compressor", wave: B}
+    - {id: limiter, ui_name: "Limiter", wave: B}
+    - {id: eq, ui_name: "Equalizer", wave: B}
+    - {id: wave_folder, ui_name: "Wave folder", wave: B}
+    - {id: room_reverb, ui_name: "Room reverb", wave: B}
+    - {id: plate_reverb, ui_name: "Plate reverb", wave: B}
+    - {id: subtractive_synth, ui_name: "Analog style synth", wave: C}
+    - {id: pd_synth, ui_name: "Phase synth", wave: C}
+    - {id: single_sampler, ui_name: "Sampler", wave: C}
+    - {id: drum_sampler, ui_name: "Drum pads", wave: C}
+    - {id: soundfont_player, ui_name: "Soundfont", wave: C}
+    - {id: layer_rack, ui_name: "Layers", wave: C}
+    - {id: acid_bass, ui_name: "Acid bass", wave: C}
+    - {id: arpeggiator, ui_name: "Arpeggiator", wave: D}
+    - {id: transpose, ui_name: "Transpose", wave: D}
+    - {id: velocity_shaper, ui_name: "Velocity", wave: D}
+    - {id: note_filter, ui_name: "Note filter", wave: D}
+    - {id: scale_snap, ui_name: "Stay in key", wave: D}
+    - {id: chord, ui_name: "Chords", wave: D}
+    - {id: impulse_reverb, ui_name: "Convolution reverb", wave: E}
+    - {id: vocoder, ui_name: "Vocoder", wave: E}
+    - {id: pitch_corrector, ui_name: "Pitch correction", wave: E}
+    - {id: neural_amp, ui_name: "Amp model", wave: E}
+    - {id: band_split, ui_name: "Band split", wave: E}
+    - {id: channel_split, ui_name: "Left right split", wave: E}
+    - {id: parallel_fx_rack, ui_name: "Parallel rack", wave: E}
+    - {id: groove_warp, ui_name: "Groove", wave: E}
+    - {id: midi_out, ui_name: "MIDI out", wave: E}
+    - {id: script_fx, ui_name: "Script effect", wave: E}
+    - {id: web_plugin_host, ui_name: "Web plugin", wave: E}
+
+tasks:
+  # ---------------- Wave A: framework and the cheapest effects ----------------
+  - id: DV01
+    wave: A
+    lane: core
+    size: S
+    needs: []
+    external_needs: []
+    decides: ["DX1", "DX2", "DX3", "DX4", "DX5"]
+    title: Record the device decisions
+    inspired_by: "ref-opendaw-devices framework (device_kinds, parameters, bypass, latency)"
+    brief:
+      files: ["notes/decisions.yaml"]
+      do: "Add DX1 to DX5 as proposed entries with real D numbers, each with summary, rule (demo hash 0x9234f99f24d6c39d and every existing golden unchanged for projects without devices), inspired_by and open_points. Ask for owner or orchestrator accept in the task message."
+      exit:
+        - "notes/decisions.yaml parses; entries present; no existing entry edited"
+  - id: DV02
+    wave: A
+    lane: core
+    size: L
+    needs: ["DV01"]
+    external_needs: []
+    title: Device chains in the model, commands and hash
+    inspired_by: "ref-opendaw-devices framework.device_kinds; own D26 skip default hashing"
+    brief:
+      files: ["core/composer-model/src/project.rs", "core/composer-model/src/hash.rs", "core/composer-model/src/change.rs", "core/composer-model/src/rules.rs", "core/composer-model/src/validate.rs", "core/composer-model/src/id.rs", "core/composer-commands/src/command.rs", "core/composer-commands/src/describe.rs", "core/composer-format (project section)"]
+      do: "Types Device{id, kind, enabled, params} and DeviceKind (a closed enum of type ids, a catalogue lookup in composer-catalogue style, not strings). Track.devices (audio chain) and Project.master_devices, both skipped while empty. Commands: add_device {owner, id, kind, index, params?}, remove_device, move_device, set_device_enabled, set_device_param {device, param, value}, set_device_params (one group). Validation: ranges from the parameter table, chain length cap from env, unknown param id rejected, duplicate id rejected. Change variants carry old values so undo is exact. Chains hash after tracks only when present, in chain order, params sorted by id with defaults skipped."
+      exit:
+        - "cargo test -p composer-model -p composer-commands pass; demo hash 0x9234f99f24d6c39d and all existing goldens unchanged"
+        - "round trip: add, set, move, remove, undo all, redo all, state_hash equals recorded values at every step"
+        - "describe() lists the new commands and the conformance test between describe and command meta passes"
+        - "load fails closed with a stable code on a project that names an unknown device kind or out of range value"
+  - id: DV03
+    wave: A
+    lane: core
+    size: M
+    needs: ["DV01"]
+    external_needs: []
+    title: composer-dsp kit (deterministic math and small blocks)
+    inspired_by: "ref-opendaw-devices framework.determinism_observations, framework.smoothing_and_first_delivery (rethink: own math, no transcendental std calls)"
+    brief:
+      files: ["core/composer-dsp (new crate)", "core/composer-engine/src/math.rs (reuse sin_turns)", "Cargo.toml (workspace member, ask first)"]
+      do: "Pure functions using only add, multiply, divide, floor, square root: sin, cos, exp2, log2, tanh, pow by exp2 and log2, db to gain and back, tan for filter design (rational approximation), a seeded 32 bit generator. Structs with no heap: one pole smoother, linear ramp (snaps to target on the last step, no op when already there), RBJ biquad with coefficient set, delay ring over a caller supplied slice (pow2 size, fractional read), peak follower, denormal flush. Accuracy targets in tests (for example exp2 and tanh within 1e-5 relative over the used range)."
+      exit:
+        - "cargo test -p composer-dsp pass; a fingerprint test of each function over a fixed sweep (hash of the bit patterns) is identical native and wasm (run in composer-wasm tests)"
+        - "no function in the crate calls f32 sin, cos, exp, ln, powf, tanh, tan (grep gate in a test)"
+  - id: DV04
+    wave: A
+    lane: core
+    size: L
+    needs: ["DV02", "DV03"]
+    external_needs: []
+    title: Device runtime in the engine (chain, bypass, control period, blob)
+    inspired_by: "ref-opendaw-devices framework.reset, bypass, latency, no_alloc, smoothing_and_first_delivery"
+    brief:
+      files: ["core/composer-engine/src/devices.rs (new)", "core/composer-engine/src/engine.rs", "core/composer-engine/src/mix.rs", "core/composer-wasm/src/blob.rs", "core/composer-render/src/lib.rs", "core/composer-engine/tests/no_alloc.rs"]
+      do: "Trait Device in composer-engine: spec table (params), set_param(id, value) called only on change at the control period, process(left, right, frames) in place on stereo, reset(), latency() in frames, setup(sample_rate) allocating everything. Engine builds the chains at setup (allocation allowed there only). Order per track: instrument, track chain, fader and pan, sends, master chain, master volume. Bypass: reset on disable plus 5 ms dry wet crossfade. Chains run at the render quantum split on control period boundaries so parameter changes land on a frame that depends only on the absolute frame. Blob v5 adds a devices section (counts validated against remaining length before any allocation, as D34). No devices means the old path is taken (demo hash unchanged)."
+      exit:
+        - "cargo test -p composer-engine -p composer-render -p composer-wasm pass; tests/no_alloc.rs runs with a 3 device chain on every track"
+        - "offline render equals wasm session output bit for bit for a project with a chain (a test like composer-wasm/tests/mix.rs)"
+        - "block size independence: rendering with block sizes 1, 32, 100, 128, 4096 gives identical bytes"
+        - "demo hash 0x9234f99f24d6c39d unchanged; bench master chain off by default"
+  - id: DV05
+    wave: A
+    lane: core
+    size: M
+    needs: ["DV04"]
+    external_needs: []
+    decides: ["DX3"]
+    title: Automation targets for device parameters
+    inspired_by: "ref-opendaw-devices framework.automation_clock; own D36"
+    brief:
+      files: ["core/composer-model/src/automation.rs", "core/composer-commands/src/command.rs", "core/composer-engine/src/automation.rs", "core/composer-wasm/src/blob.rs", "notes/decisions.yaml"]
+      do: "AutomationTarget::Device {owner, device, param}; lanes hold integer values in the parameter unit; compile to frames with the tempo map as D36 does; evaluate at control period; a setting parameter is refused as a target. Existing add_automation_point family gains the new target (additive, no signature change)."
+      exit:
+        - "cargo test -p composer-model -p composer-commands -p composer-engine pass; existing lane tests and goldens unchanged"
+        - "a lane on a delay feedback parameter renders identically in offline and wasm, and under four different block sizes"
+        - "tests/no_alloc.rs covers a device lane with all curves"
+  - id: DV06
+    wave: A
+    lane: sound
+    size: S
+    needs: ["DV04"]
+    external_needs: []
+    title: stereo_tool (balance, width, polarity, swap)
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.stereo_tool"
+    brief:
+      files: ["core/composer-devices (new crate, one module per device) or core/composer-engine/src/devices/stereo_tool.rs", "core/composer-devices tests"]
+      do: "Parameters per the reference note: volume (centi dB, minimum means silence), balance, width (negative to mono, positive wide), invert left, invert right, swap, pan law setting (linear or equal power). One 2x2 matrix per control period, glided over 5 ms, first delivery jumps. Own design of the matrix algebra from mid side theory."
+      exit:
+        - "unit tests: unity passes through exactly; full mono gives equal channels; swap and invert behave; equal power at centre is minus 3 dB per side"
+        - "golden fingerprint of 2 s of a fixed signal, identical native and wasm"
+  - id: DV07
+    wave: A
+    lane: sound
+    size: M
+    needs: ["DV04"]
+    external_needs: []
+    title: stereo_delay (tempo synced echo with cross feedback and filter)
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.stereo_delay (borrow, minus the avoid items)"
+    brief:
+      files: ["core/composer-devices/src/stereo_delay.rs", "core/composer-engine/src/tempo.rs (read tempo per control period)"]
+      do: "Time in note fractions (index table from off to one bar) plus milliseconds, pre delay per side, feedback, cross, tilt filter (bypass at zero, high pass positive, low pass negative), wet and dry in dB, slow wobble depth and speed. Ring sized at setup for one bar at the slowest allowed tempo (env) plus margin. Time changes glide over 250 ms with fractional read. Own limiter on the return with explicit times in seconds. Tail survives seeks and loop wraps, clears on transport stop and on bypass."
+      exit:
+        - "impulse test: echoes at the expected frame for sync 1/8 at 120 bpm, decaying by the feedback"
+        - "tempo change mid render keeps the tail continuous (no discontinuity above a stated threshold)"
+        - "tests/no_alloc.rs passes with the delay at maximum time; memory per instance reported in a test and under the env budget"
+  - id: DV08
+    wave: A
+    lane: sound
+    size: S
+    needs: ["DV04"]
+    external_needs: []
+    title: bit_crusher
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.bit_crusher"
+    brief:
+      files: ["core/composer-devices/src/bit_crusher.rs"]
+      do: "Sample rate reduction with a fractional hold phase and an anti alias low pass that follows the reduced rate, bit depth 1 to 16, boost with half compensation at the output, mix. The rate target is applied per control period and glides, never per block."
+      exit:
+        - "bits = 1 snaps outputs to the three levels; mix 0 and boost 0 is bit exact pass through"
+        - "golden fingerprint native and wasm"
+  - id: DV09
+    wave: A
+    lane: sound
+    size: S
+    needs: ["DV04"]
+    external_needs: []
+    title: noise_gate (internal detector)
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.noise_gate; sidechain input comes in DV20"
+    brief:
+      files: ["core/composer-devices/src/noise_gate.rs"]
+      do: "Threshold, return (hysteresis), attack, hold, release, floor (with a true off at the minimum), inverse. Detector: peak follower with fixed decay. One mapping per parameter lives in the parameter table (no second mapping elsewhere). Starts closed and silent after reset."
+      exit:
+        - "test: loud then quiet detector opens then closes within release plus hold; inverse flips it; floor minimum gives exact silence"
+        - "golden fingerprint native and wasm"
+  - id: DV10
+    wave: A
+    lane: sound
+    size: S
+    needs: ["DV04"]
+    external_needs: []
+    title: waveshaper
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.waveshaper"
+    brief:
+      files: ["core/composer-devices/src/waveshaper.rs"]
+      do: "Curve setting (hard clip, soft cubic, tanh, sigmoid, arctan, asymmetric; an enum index, not a string), input gain, output gain, mix, all gains glided at the control period. Curves built from the DSP kit functions. Offer an optional 2x oversampling setting once DV25 (half band) exists (note in the task, not a dependency)."
+      exit:
+        - "hard clip clamps; mix 0 is exact dry; golden fingerprint native and wasm for each curve"
+  - id: DV11
+    wave: A
+    lane: sound
+    size: S
+    needs: ["DV04"]
+    external_needs: []
+    title: auto_pan (tempo synced tremolo and pan)
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.auto_pan"
+    brief:
+      files: ["core/composer-devices/src/auto_pan.rs"]
+      do: "Rate as a fraction index, depth, slope, symmetry, phase offset, channel offset. Phase from the song position in ticks (sample accurate from the tempo clock), so a seek lands on the right phase. One pole smoothing of each channel gain. Shape function from the DSP kit pow."
+      exit:
+        - "depth 0 is exact unity; channel offset 180 degrees alternates left and right; phase after a seek equals phase of continuous play at the same tick"
+        - "golden fingerprint native and wasm"
+  - id: DV12
+    wave: A
+    lane: interfaces
+    size: M
+    needs: ["DV02", "DV06"]
+    external_needs: []
+    title: CLI, daemon and MCP surface for devices
+    brief:
+      files: ["cli/", "daemon/composerd/src/methods.rs", "mcp/composer-mcp/src/tools.rs", "core/composer-commands/src/describe.rs"]
+      do: "A read method device.types returning the catalogue (kind, we_call_it ui name, parameter table with unit, range, default, curve, automatable flag, version), device.list for a chain, and the new commands as tools through describe (parity rule: no UI only action). Tool descriptions state units so an agent does not guess scales. Proposals (D28) can contain device commands."
+      exit:
+        - "cargo test -p composerd -p composer-mcp pass; MCP tool count test updated"
+        - "parity test: add a stereo_tool through MCP, read it through the daemon, state_hash equal"
+  - id: DV13
+    wave: A
+    lane: ui
+    size: M
+    needs: ["DV06", "DV12"]
+    external_needs: []
+    title: Device chain panel generated from the catalogue
+    brief:
+      files: ["web/app/src/ui/Devices.tsx (new)", "web/app/src/state/commands.ts", "web/app/src/backend/types.ts", "web/app/src/model.ts"]
+      do: "Per track and master: ordered list of device cards with enable switch, remove, drag to reorder, and a parameter row per automatable parameter generated from device.types (slider or knob by curve, unit label, double click to default, right click add automation lane). Plain names. One undo step per gesture (group on pointer up). Keyboard operable sliders with role slider."
+      exit:
+        - "vitest: unit scaling and curve mapping round trips for each curve kind within one integer step"
+        - "e2e devices: add Echo to track 1, change feedback, undo, redo, state matches; automation lane appears"
+  - id: DV14
+    wave: A
+    lane: perf
+    size: S
+    needs: ["DV04", "DV07"]
+    external_needs: []
+    title: Device scale budgets in bench
+    brief:
+      files: ["bench/composer-bench", "bench/budgets.env", "bench/baseline.yaml"]
+      do: "Generated stress project with COMPOSER_BENCH_DEVICE_TRACKS tracks each with a chain of COMPOSER_BENCH_DEVICE_CHAIN effects (stereo tool, delay, crusher, gate, waveshaper, auto pan in rotation), 48 kHz render of N seconds. Budgets from env: render real time factor, state_hash ms with devices, apply ns for set_device_param, memory per delay instance."
+      exit:
+        - "cargo run --release -p composer-bench with the env set reports and enforces the new budgets; baseline.yaml updated with measured values and headroom"
+        - "thresholds only from env, none hard coded"
+
+  # ---------------- Wave B: dynamics, EQ and space ----------------
+  - id: DV20
+    wave: B
+    lane: core
+    size: L
+    needs: ["DV04"]
+    external_needs: []
+    title: Sidechain routing and latency alignment
+    inspired_by: "ref-opendaw-devices framework.sidechain, framework.latency"
+    brief:
+      files: ["core/composer-model (device input reference)", "core/composer-commands (set_device_sidechain {device, source track or none})", "core/composer-engine/src/devices.rs", "core/composer-engine/src/mix.rs", "core/composer-wasm/src/blob.rs"]
+      do: "A device may declare a sidechain input; the model stores an optional source track id; validation refuses a source that would create a cycle (the source must be rendered before the consumer in a fixed order; no feedback routes). The engine renders tracks in a topological order with a stable tie break by track order, taps the source after its own chain and before its fader. Alignment: arrival time per node computed at setup as own latency plus the maximum of predecessors; delay lines only at sums, sends and sidechain taps; zero cost when all latencies are 0."
+      exit:
+        - "cargo test passes: a cycle is rejected with a stable code; sidechain from a kick track makes a gate or compressor react to it"
+        - "a project with a latent test device (fixed latency) sums aligned, and the same project with all latencies 0 renders byte identical to before"
+        - "block size independence holds with a sidechain"
+  - id: DV21
+    wave: B
+    lane: sound
+    size: L
+    needs: ["DV20"]
+    external_needs: []
+    title: compressor (own design)
+    inspired_by: "ref-opendaw-devices devices.effects_dynamics_eq.compressor (rethink: behavior only, not the ported source; DX7)"
+    brief:
+      files: ["core/composer-devices/src/compressor.rs"]
+      do: "Feed forward design from the public textbook structure: level detector (peak or smoothed rms by setting), static curve with soft knee in dB, attack and release follower on the reduction, makeup with an auto option, input gain, mix for parallel use, optional 5 ms lookahead with a crossfaded toggle, sidechain input from DV20 or the main input. Fixed per sample processing so block size cannot change the result (no block wise auto timing). Reduction meter feed. Own constants, chosen by listening and measurement."
+      exit:
+        - "static curve test: below threshold unity; at ratio 4 and 12 dB over the output is 3 dB over; knee symmetric"
+        - "attack and release time test within 5 percent of the set value on a step"
+        - "golden fingerprint native and wasm; block size independence; latency reported equals lookahead when on"
+  - id: DV22
+    wave: B
+    lane: sound
+    size: M
+    needs: ["DV20"]
+    external_needs: []
+    title: limiter with explicit ceiling
+    inspired_by: "ref-opendaw-devices devices.effects_dynamics_eq.limiter (borrow, with a ceiling parameter added)"
+    brief:
+      files: ["core/composer-devices/src/limiter.rs"]
+      do: "Sliding window peak maximum over the lookahead (5 ms), release follower, reduction smoothed by cascaded moving averages spanning the lookahead, ceiling parameter (separate from threshold, no coupling), optional auto makeup toggle, final hard clamp, crossfaded lookahead toggle, latency reported. Makes the master soft clip of D44 optional to replace (record in the task, no change to D44 here)."
+      exit:
+        - "no output sample above ceiling over a test of loud noise bursts; a quiet signal below threshold is exact unity when makeup is off"
+        - "latency equals the lookahead and the sum alignment test from DV20 stays green"
+        - "golden fingerprint native and wasm"
+  - id: DV23
+    wave: B
+    lane: sound
+    size: L
+    needs: ["DV04", "DV03"]
+    external_needs: []
+    title: eq (seven band parametric) with analyser feed
+    inspired_by: "ref-opendaw-devices devices.effects_dynamics_eq.eq (borrow; fix: smoothing, decay not reader armed)"
+    brief:
+      files: ["core/composer-devices/src/eq.rs", "core/composer-dsp (radix 2 FFT, Blackman window)"]
+      do: "Bands in fixed order: high pass, low shelf, bell x3, high shelf, low pass; per band enable, frequency, gain, q; pass bands add order 1 to 4 (a setting). Coefficients recomputed once per control period and interpolated across the period (no zipper). Analyser: mono sum, 1024 point window, 512 magnitude bins, fixed per frame decay, computed only while a client subscribes, never written to the model and never hashed."
+      exit:
+        - "frequency response test at six frequencies per band type within 0.1 dB of the analytic response"
+        - "automated frequency sweep has no step discontinuity above a stated bound"
+        - "analyser bins identical across runs for the same input; offline render with the analyser off equals render with it on (audio unchanged)"
+        - "golden fingerprint native and wasm"
+  - id: DV24
+    wave: B
+    lane: sound
+    size: S
+    needs: ["DV20", "DV09"]
+    external_needs: []
+    title: noise_gate sidechain input
+    brief:
+      files: ["core/composer-devices/src/noise_gate.rs"]
+      do: "Use the DV20 sidechain tap as the detector when set, else the main input. Output still the main signal."
+      exit:
+        - "test: gate on a pad opens only when the kick track plays; no sidechain keeps the old behaviour byte for byte"
+  - id: DV25
+    wave: B
+    lane: sound
+    size: M
+    needs: ["DV03", "DV04"]
+    external_needs: []
+    title: wave_folder and a shared half band oversampler
+    inspired_by: "ref-opendaw-devices devices.effects_cheap.wave_folder (rethink: own half band design, not the truncated table)"
+    brief:
+      files: ["core/composer-dsp (halfband 2x, 4x by cascade)", "core/composer-devices/src/wave_folder.rs"]
+      do: "Design a linear phase half band FIR with measured stopband (at least 80 dB) and a fixed latency; 2x, 4x, 8x by cascading. Wave folder: drive, volume, oversampling setting. The latency is reported; changing the setting changes the latency and triggers alignment rebuild (command applies at a safe point, not mid block). Option to apply the oversampler to waveshaper later."
+      exit:
+        - "oversampler: passband ripple under 0.05 dB, stopband over 80 dB, reported latency equals the measured impulse delay"
+        - "folder output stays within unit range for any input; aliasing test: a high sine with drive has lower alias energy at 4x than at 2x"
+        - "golden fingerprint native and wasm; latency alignment test green"
+  - id: DV26
+    wave: B
+    lane: sound
+    size: M
+    needs: ["DV04"]
+    external_needs: []
+    title: room_reverb as a device (replaces the fixed master reverb path)
+    inspired_by: "ref-opendaw-devices devices.effects_space_and_heavy.room_reverb (borrow; fix: tunings scaled by sample rate, no dead parameter)"
+    brief:
+      files: ["core/composer-devices/src/room_reverb.rs", "core/composer-engine/src/mix.rs", "core/composer-model (migration of Project.master reverb fields)"]
+      do: "Comb and allpass reverb with lengths computed from the sample rate at setup, stereo spread, pre delay, damp, decay, wet and dry. The existing master reverb (size, mix, per track send) keeps working unchanged: it becomes a built in return device with the same numbers, proven by the existing goldens. Do not change any existing hash. New projects may add the device on a master chain or a future return bus."
+      exit:
+        - "existing reverb goldens and demo hash unchanged"
+        - "the device at 48 kHz and 96 kHz has the same decay time within 5 percent (tested by an energy decay measurement)"
+        - "no_alloc test passes; memory per instance under the env budget"
+  - id: DV27
+    wave: B
+    lane: sound
+    size: L
+    needs: ["DV04", "DV03"]
+    external_needs: []
+    title: plate_reverb
+    inspired_by: "ref-opendaw-devices devices.effects_space_and_heavy.plate_reverb (borrow: published topology; sizes from the sample rate)"
+    brief:
+      files: ["core/composer-devices/src/plate_reverb.rs"]
+      do: "Build from the published plate structure: pre delay, input low pass, input diffusion allpass pair x2, tank of two decay branches with modulated delay lines, damping, output taps. Excursion modulation uses our sine kit and cubic interpolation. All delay lengths computed from seconds at setup for any sample rate."
+      exit:
+        - "impulse response: decays smoothly, stereo decorrelated (interchannel correlation under a stated bound), no DC build up"
+        - "no_alloc and memory budget; golden fingerprint native and wasm"
+
+  # ---------------- Wave C: instruments ----------------
+  - id: DV30
+    wave: C
+    lane: core
+    size: L
+    needs: ["DV04"]
+    external_needs: []
+    decides: ["DX1"]
+    title: Instrument slot and voice kit
+    inspired_by: "ref-opendaw-devices framework.voices (borrow); today's Track.sound and bank path (D29, D34, D37)"
+    brief:
+      files: ["core/composer-model/src/project.rs", "core/composer-commands/src/command.rs", "core/composer-engine/src/voices.rs", "core/composer-engine/src/instrument.rs", "core/composer-dsp (voice allocator)"]
+      do: "Track gets an optional instrument device (set_instrument {track, kind, params}); a track without one keeps the current sound and catalogue path, so every old file and hash is unchanged. Voice kit: fixed pool, poly or mono, unison fan with 1/sqrt(N) gain, steal oldest with a short fade in a spare area, mono stack with legato glide measured in ticks, retrigger on a fresh slot while the old one fades."
+      exit:
+        - "demo hash and all voice goldens (core/composer-engine/tests/voices.rs) unchanged"
+        - "voice kit tests: steal does not click (max sample step bounded), mono legato glides, unison gain sums to expected energy"
+        - "no_alloc test with the pool saturated"
+  - id: DV31
+    wave: C
+    lane: sound
+    size: L
+    needs: ["DV30", "DV03"]
+    external_needs: []
+    title: subtractive_synth
+    inspired_by: "ref-opendaw-devices devices.instruments.subtractive_synth (borrow, with own filter envelope)"
+    brief:
+      files: ["core/composer-devices/src/subtractive_synth.rs"]
+      do: "Two oscillators (sine, triangle, saw, square with PolyBLEP from the kit), mix, multi pole low pass with resonance and order 1 to 4 (Q compensated by order), separate filter envelope and amp envelope (ADSR), keyboard tracking, LFO to pitch, cutoff, volume, glide, unison 1, 3, 5 with detune and stereo spread, mono and poly. Cutoff modulation summed in an exponential domain then mapped with the kit exp2; coefficients per control period interpolated. Polyphony and unison caps from env."
+      exit:
+        - "oscillator alias test: saw at high pitch has alias energy under a stated bound"
+        - "filter test: cutoff tracks one octave per octave of the cutoff parameter; resonance rises with Q"
+        - "voices fingerprint golden native and wasm; no_alloc with 16 voices times unison 5"
+        - "preset set of 6 sounds (bass, lead, pad, pluck, brass, strings like) rendered and listened to by the owner"
+  - id: DV32
+    wave: C
+    lane: sound
+    size: M
+    needs: ["DV30"]
+    external_needs: []
+    title: single_sampler (one sample, whole keyboard)
+    inspired_by: "ref-opendaw-devices devices.instruments.single_sampler (borrow; use D34 sample data placement)"
+    brief:
+      files: ["core/composer-devices/src/single_sampler.rs", "core/composer-engine/src/bank.rs", "core/composer-wasm/src/blob.rs"]
+      do: "Asset by content hash (D40), root key, tune, octave, attack, release (squared envelope), start and end region (end before start plays backward), loop with equal gain crossfade (clamped to half the loop), one shot, fixed pitch, mono or poly, pan. Interpolation: cubic (better than linear for up shifts). Sample not resident: notes are dropped, never crash, no allocation. Sample swapped mid note is safe. Reuse the D34 bank placement for sample data in the blob."
+      exit:
+        - "root key plays at unity rate (output equals source within interpolation error); reverse starts at the last frame; one shot ignores note off unless looping"
+        - "loop crossfade test: sustained loop has no discontinuity above a bound"
+        - "golden fingerprint native and wasm; no_alloc passes"
+  - id: DV33
+    wave: C
+    lane: sound
+    size: L
+    needs: ["DV30"]
+    external_needs: []
+    decides: ["DX7"]
+    title: pd_synth (phase distortion synth, own tuning)
+    inspired_by: "ref-opendaw-devices devices.instruments.pd_synth (rethink: concept only, no fitted tables; DX7)"
+    brief:
+      files: ["core/composer-devices/src/pd_synth.rs"]
+      do: "Two lines, each a cosine read through a bent phase map whose knee moves with one distortion amount; shapes: saw, square, pulse, double sine and two resonance shapes using windowed sync; envelopes per line for pitch, distortion and level with 8 stages of rate and level, a sustain step and an end step (end ends the note even while held, as the hardware did); line combine: plain, ring, noise; vibrato; detune; glide. Rate and level tables are our own measured or chosen curves, listed in the task with how they were chosen. No render from a commercial emulation is stored."
+      exit:
+        - "octave test: distortion 0 gives a pure cosine; harmonic content rises with the amount; sustain off ends the note at the end step"
+        - "golden fingerprint native and wasm; no_alloc"
+        - "owner listens to 4 presets"
+  - id: DV34
+    wave: C
+    lane: sound
+    size: L
+    needs: ["DV32"]
+    external_needs: []
+    title: drum_sampler (pads with choke groups and per pad strip)
+    inspired_by: "ref-opendaw-devices devices.instruments.drum_sampler (borrow; use the later design: a pad is a single_sampler cell behind a note filter)"
+    brief:
+      files: ["core/composer-devices/src/drum_sampler.rs", "core/composer-model (pad list)", "core/composer-commands"]
+      do: "Pad list keyed by MIDI key; each pad is a single_sampler instance (own sample, region, gate mode off or on or loop, pitch, attack, release, volume, pan, mute, solo, exclude group). Notes route to the pad by key and are played at the pad's configured key. Choke is resolved after any MIDI effects in front (fixing the reference inconsistency) and fades in 5 ms. Per pad effect chain is wave E (composite); here only the pad strip. Per pad voice cap 16 (env)."
+      exit:
+        - "choke test: closed hat chokes open hat within 5 ms; a transpose before the device changes both which pad plays and which chokes consistently"
+        - "mute and solo test; golden fingerprint native and wasm; no_alloc with 16 pads of 16 voices"
+        - "UI hook: the existing roll can name drum rows from the pad labels (U task later)"
+  - id: DV35
+    wave: C
+    lane: core
+    size: S
+    needs: ["DV30"]
+    external_needs: []
+    title: soundfont_player as a device node
+    brief:
+      files: ["core/composer-engine/src/bank.rs", "core/composer-commands"]
+      do: "Expose the existing bank instrument as an instrument device kind with a preset index and a bank asset reference, so a track can hold it through set_instrument. No new DSP. Old Track.sound path remains and maps onto the same engine code."
+      exit:
+        - "bank goldens (tests/bank.rs) unchanged; a project using the device renders byte identical to the same project using the sound path"
+  - id: DV36
+    wave: C
+    lane: sound
+    size: L
+    needs: ["DV30", "DV34"]
+    external_needs: []
+    title: layer_rack (several instruments under one set of notes)
+    inspired_by: "ref-opendaw-devices devices.instruments.layer_rack and framework.composites"
+    brief:
+      files: ["core/composer-model", "core/composer-commands", "core/composer-engine/src/devices.rs"]
+      do: "A layer holds an instrument, its own audio chain and a strip (gain, pan, mute, solo). Layers receive the same note stream and are summed. Mute gates at the strip, the layer keeps running. Nesting depth cap from env. Key and velocity split come from the note filter in wave D, not from this device."
+      exit:
+        - "two layers equal the sum of two single instrument renders within one ulp of the fixed summation order"
+        - "mute test: unmuting is instant and in phase; a cap on depth is enforced with a stable code"
+  - id: DV37
+    wave: C
+    lane: sound
+    size: M
+    needs: ["DV31"]
+    external_needs: []
+    title: acid_bass (optional, own design)
+    inspired_by: "ref-opendaw-devices devices.instruments.acid_bass (rethink: structure only; DX7)"
+    brief:
+      files: ["core/composer-devices/src/acid_bass.rs"]
+      do: "Monophonic saw or square voice into a resonant low pass with envelope mod, decay and accent circuit, slide as overlap, built in 16 step pattern turned into ordinary notes (accent as full velocity, slide as overlap longer than a step). Single voice merger with last note priority. Own constants. Optional: skip if the subtractive synth with mono mode and glide satisfies the owner."
+      exit:
+        - "slide chain test: one note id, no phantom held notes; accent threshold test survives velocity quantisation"
+        - "golden fingerprint native and wasm"
+
+  # ---------------- Wave D: MIDI effects ----------------
+  - id: DV40
+    wave: D
+    lane: core
+    size: L
+    needs: ["DV30"]
+    external_needs: []
+    decides: ["DX6"]
+    title: MIDI effect chain runtime
+    inspired_by: "ref-opendaw-devices framework.midi_events and midi composite plan decisions"
+    brief:
+      files: ["core/composer-model", "core/composer-commands", "core/composer-engine/src/schedule.rs", "core/composer-engine/src/devices.rs", "core/composer-wasm/src/blob.rs"]
+      do: "Per track ordered MIDI effect chain between the schedule and the instrument. Event record: tick, frame, note id, pitch, cent, velocity, kind. Transform interface works on a block of events with fixed capacities; overflow rule documented (drop new on, pass off). Note id re-identification table for effects that create notes (merge style id counter). Chance via hash of note identity and cycle. Discontinuity (seek, loop wrap, stop) calls release_all. Hash and commands like audio chains (DX1 reuse)."
+      exit:
+        - "an empty chain is byte identical to today; a pass through test device is byte identical"
+        - "stuck note test: parameter edit during a held note never leaves a hanging note"
+        - "block size independence and loop wrap test; no_alloc"
+  - id: DV41
+    wave: D
+    lane: sound
+    size: S
+    needs: ["DV40"]
+    external_needs: []
+    title: transpose and velocity_shaper
+    inspired_by: "ref-opendaw-devices devices.midi_effects.transpose, velocity_shaper"
+    brief:
+      files: ["core/composer-devices/src/transpose.rs", "core/composer-devices/src/velocity_shaper.rs"]
+      do: "Transpose: octaves, semitones, cents; off replays the on rewrite by id; out of range drops. Velocity: magnet target and strength, random amount with a hash of seed and note position (not a stream), offset, mix; deterministic and position locked."
+      exit:
+        - "unit tests incl. out of range drop, off replay after a mid note edit, same note same random after reordering the project"
+  - id: DV42
+    wave: D
+    lane: sound
+    size: S
+    needs: ["DV40"]
+    external_needs: []
+    title: note_filter and scale_snap
+    inspired_by: "ref-opendaw-devices devices.midi_effects.note_filter, scale_snap"
+    brief:
+      files: ["core/composer-devices/src/note_filter.rs", "core/composer-devices/src/scale_snap.rs", "core/composer-theory (scale tables, D23)"]
+      do: "Note filter: min, max, transpose or set key; min above max passes nothing; off result outside range ignored. Scale snap: root, scale from composer-theory, follow project key (D23) at the note tick, nearest scale tone with ties down, two notes mapped to one pitch share it (first on, last off). Reuse composer-theory, no new scale tables."
+      exit:
+        - "unit tests incl. shared pitch rule and follow project key across a key change"
+  - id: DV43
+    wave: D
+    lane: sound
+    size: L
+    needs: ["DV40", "DV42"]
+    external_needs: []
+    title: arpeggiator
+    inspired_by: "ref-opendaw-devices devices.midi_effects.arpeggiator (borrow behavior, own mode list and lane layout)"
+    brief:
+      files: ["core/composer-devices/src/arpeggiator.rs"]
+      do: "Phase 1: pool ordered by start then pitch, modes up, down, up down, down up, converge, diverge, random once, random with seed (hash based), octaves 1 to 5, rate fractions, gate, repeat, hold, retrigger (off, note, bar, beat), offset, velocity magnet. Steps land on the absolute grid so nothing restarts when a key goes down; a seek releases everything; note on before note off at equal tick. Phase 2: step lanes of up to 64 (rest, tie, chord, ratchet, velocity, gate, transpose, octave, chance) with pattern length independent of the note cycle. Capacity caps from env."
+      exit:
+        - "golden: 2000 random scenarios against a frozen copy of our own phase 1 output (regression guard for phase 2)"
+        - "walk output never depends on playback history (jump back then play equals fresh play from the same tick)"
+        - "block size independence and loop wrap tests; no_alloc"
+  - id: DV44
+    wave: D
+    lane: sound
+    size: M
+    needs: ["DV40", "DV42"]
+    external_needs: []
+    title: chord (our own design, no reference)
+    inspired_by: "none in the reference (no chord device found); ref-opendaw harmony tracks idea (key and chord events) for the optional follow mode"
+    brief:
+      files: ["core/composer-devices/src/chord.rs", "core/composer-theory"]
+      do: "Each incoming note becomes a chord: shape by name (major, minor, sus2, sus4, seventh types, power, custom interval list up to N voices), inversion, spread (octave of the root), strum in ticks (notes staggered), velocity taper, and optional stay in key (build the triad from the project scale instead of a fixed shape, using composer-theory). Created notes get fresh ids from the effect's own counter; the off of the source releases all of them."
+      exit:
+        - "unit tests: C major shape gives C E G; stay in key on C major builds triads from the scale on every degree; strum offsets exact in ticks; off releases all voices"
+  - id: DV45
+    wave: D
+    lane: ui
+    size: M
+    needs: ["DV41", "DV43", "DV13"]
+    external_needs: []
+    title: MIDI effect rack in the device panel
+    brief:
+      files: ["web/app/src/ui/Devices.tsx", "web/app/src/state/commands.ts"]
+      do: "A MIDI effects row before the instrument in the same panel with the same generated cards. Beginner presets for arpeggiator (Up, Down, Chord pump, 16th pulse) as one tap."
+      exit:
+        - "e2e midi-fx: add Arpeggiator, play a held chord in the roll, the rendered notes follow the rate; undo removes it"
+
+  # ---------------- Wave E: heavy and later ----------------
+  - id: DV50
+    wave: E
+    lane: sound
+    size: XL
+    needs: ["DV23", "DV04"]
+    external_needs: ["T23"]
+    title: impulse_reverb (convolution)
+    inspired_by: "ref-opendaw-devices devices.effects_space_and_heavy.impulse_reverb (borrow: published partition scheme)"
+    brief:
+      files: ["core/composer-devices/src/impulse_reverb.rs", "core/composer-dsp (FFT with fixed summation order)"]
+      do: "Zero latency non uniform partitioned convolution: direct head, then uniform partition levels, with pipelined big partitions so no quantum spikes. IR from an asset hash, resampled to the engine rate at load, transformed over many quanta (the first moments of a swap are allowed to differ, documented). Normalize and reverse as settings. Max IR length from env. FFT and multiply accumulate use one fixed order so native and wasm agree."
+      exit:
+        - "output equals direct time domain convolution within 1e-5 for a short IR; latency 0; worst quantum time under a stated budget in bench"
+        - "memory per instance reported and under the env budget; golden fingerprint native and wasm"
+  - id: DV51
+    wave: E
+    lane: sound
+    size: L
+    needs: ["DV20", "DV23"]
+    external_needs: []
+    title: vocoder
+    inspired_by: "ref-opendaw-devices devices.effects_space_and_heavy.vocoder"
+    brief:
+      files: ["core/composer-devices/src/vocoder.rs"]
+      do: "8, 12 or 16 band bank, carrier is the main input, modulator is seeded noise, the main input itself, or a sidechain (DV20). Band edges exponential over a range, Q from start to end across bands, envelope attack and release, gain, mix. Coefficients interpolated geometrically per control period. Band count change fades in."
+      exit:
+        - "unit tests: self modulation acts as a multiband gate; noise source is reproducible from the seed"
+        - "golden fingerprint native and wasm"
+  - id: DV52
+    wave: E
+    lane: sound
+    size: XL
+    needs: ["DV20", "DV25"]
+    external_needs: []
+    title: pitch_corrector
+    inspired_by: "ref-opendaw-devices devices.effects_space_and_heavy.pitch_corrector (borrow: published YIN and TD-PSOLA)"
+    brief:
+      files: ["core/composer-devices/src/pitch_corrector.rs"]
+      do: "YIN detector on a decimated mono sum with voiced gating, snap to key and scale from composer-theory with hysteresis and a smoothed pitch centre, glide by a retune amount, TD-PSOLA shifter, follow project key option. Decision logic in f64 with pinned tie breaks (reproducible note sequence). Reports latency. Only monophonic input is promised."
+      exit:
+        - "synthetic test: a sine drifting around A4 with vibrato is held near A4 at full retune; chromatic mode snaps to the nearest semitone; unvoiced noise passes untouched"
+        - "golden note sequence fixture; latency alignment green"
+  - id: DV53
+    wave: E
+    lane: research
+    size: S
+    needs: []
+    external_needs: []
+    title: Neural amp feasibility and licence review
+    inspired_by: "ref-opendaw-devices devices.effects_space_and_heavy.neural_amp"
+    brief:
+      files: ["notes/ref-neural-amp.yaml (new)"]
+      do: "Read the public model file format and any inference core licence, the third party model service terms, and estimate our own pure Rust inference cost per sample for a typical model (deterministic order of operations). Recommend: ship inference ourselves, host as a web plugin, or drop. Decide whether model files are assets by hash (like IRs)."
+      exit:
+        - "notes/ref-neural-amp.yaml with src and tags; recommendation and the licence status of every piece; unverified list"
+  - id: DV54
+    wave: E
+    lane: sound
+    size: XL
+    needs: ["DV53", "DV04"]
+    external_needs: []
+    title: neural_amp device (only if DV53 says go)
+    brief:
+      files: ["core/composer-devices/src/neural_amp.rs"]
+      do: "Own inference for the model families DV53 allows, fixed arithmetic order, model weights from an asset hash, input and output gain, mono or stereo, mix. Falls back to pass through while the asset is not resident."
+      exit:
+        - "reference output of a tiny model agrees within a stated tolerance; golden native and wasm; per sample cost within the render budget for the supported models"
+  - id: DV55
+    wave: E
+    lane: core
+    size: XL
+    needs: ["DV04", "DV20", "DV40"]
+    external_needs: []
+    title: Composite devices (parallel rack, channel split, band split)
+    inspired_by: "ref-opendaw-devices framework.composites and devices.effects_space_and_heavy.band_split, channel_split, parallel_fx_rack"
+    brief:
+      files: ["core/composer-model", "core/composer-commands", "core/composer-engine/src/devices.rs", "core/composer-dsp (crossover)"]
+      do: "A composite hosts entries, each with its own chain and a strip (gain, pan, mute, solo), plus dry and wet. Distributors: broadcast, per channel (untouched sum equals input exactly), frequency bands via Linkwitz-Riley crossovers with phase compensation (untouched sum is a flat allpass). Out of range entry reads silence. Nesting depth cap from env. Latency alignment between entries."
+      exit:
+        - "channel split with empty entries is byte identical to bypass; band split of unit noise sums back with flat magnitude within 0.1 dB"
+        - "nesting 3 deep renders identically native and wasm; no_alloc"
+  - id: DV56
+    wave: E
+    lane: core
+    size: M
+    needs: ["DV40"]
+    external_needs: []
+    title: groove_warp (needs a groove model first)
+    inspired_by: "ref-opendaw-devices devices.midi_effects.groove_warp (rethink)"
+    brief:
+      files: ["core/composer-model (groove templates)", "core/composer-devices/src/groove_warp.rs"]
+      do: "A swing or groove template in the project (list of tick offsets per position in a cycle), a MIDI effect that warps note ticks by it and clamps to the block. Do not start before the owner confirms swing as a model concept; today quantize and swing may be commands instead."
+      exit:
+        - "unit tests: swing 0 is identity; warped then unwarped positions agree"
+  - id: DV57
+    wave: E
+    lane: interfaces
+    size: M
+    needs: ["DV40"]
+    external_needs: []
+    title: midi_out (daemon and shell only)
+    inspired_by: "ref-opendaw-devices devices.instruments.midi_out"
+    brief:
+      files: ["daemon/composerd", "core/composer-engine (event tap)"]
+      do: "Instrument kind that emits no audio; converts the unit notes to raw MIDI with frame accurate timing and optional clock, start, stop and song position; the host thread drains a queue. Needs a realtime host (Tauri or daemon) and a permission story for browsers. Offline render ignores it."
+      exit:
+        - "unit tests for message bytes and timing math; hash unaffected when disabled"
+  - id: DV58
+    wave: E
+    lane: research
+    size: M
+    needs: []
+    external_needs: []
+    title: Scripted devices design (sandboxed, bounded)
+    inspired_by: "ref-opendaw-devices devices.scripting_and_hosting.script_fx and framework.scripted_devices_warning (rethink)"
+    brief:
+      files: ["notes/ref-script-devices.yaml (new)", "notes/decisions.yaml"]
+      do: "Design only. The reference runs user JavaScript in the audio worklet, which cannot be deterministic, bounded or the same offline. Options to evaluate: user code compiled to a restricted wasm module with fuel metering and fixed memory, a small expression language for effects and MIDI effects, or no scripting (AI writes a device description instead and the engine interprets a closed set of blocks). Recommend one with its cost and what determinism it keeps."
+      exit:
+        - "notes file with options, a recommendation and a threat list (infinite loop, memory, time)"
+  - id: DV59
+    wave: E
+    lane: core
+    size: XL
+    needs: ["DV04", "DV20", "DV40"]
+    external_needs: []
+    title: Web plugin host (WCLAP) as a device kind
+    inspired_by: "ref-opendaw-devices devices.scripting_and_hosting.web_plugin_host; notes/ref-webclap.yaml; notes/ref-clap-host.yaml"
+    brief:
+      files: ["web/app (host glue)", "core/composer-model (plugin device: bundle hash, plugin id, state bytes, parameter list)", "core/composer-engine (bridge slot)"]
+      do: "Device kind web_plugin with bundle by content hash, plugin id, state as a bytes field (never base64), parameter list copied from the plugin with id, min, max, default, flags so automation uses DX3. Missing bundle: the project loads and the device is silent with a stable code until the user resolves it. Plugin instances run behind the loader notes in ref-webclap; their output is marked non deterministic, excluded from bit for bit goldens, and offline render uses the same plugin only when present. Latency from the plugin latency extension feeds DX5 alignment. Native CLAP hosting is the daemon tier and follows notes/ref-clap-host.yaml."
+      exit:
+        - "a bundled test plugin loads, renders a note, and its parameter automates; project save and load keeps state bytes; missing bundle case covered"
+        - "hash of a project with a plugin device is stable for the model, and render tests mark plugin tracks excluded from the bit for bit test with a visible flag"
+
+waves:
+  - wave: A
+    goal: "Device framework: chain per track and master, bypass, parameter ids, automation targets, state hash rules, catalogue for UI, CLI and MCP; plus the six cheapest effects."
+    tasks: ["DV01", "DV02", "DV03", "DV04", "DV05", "DV06", "DV07", "DV08", "DV09", "DV10", "DV11", "DV12", "DV13", "DV14"]
+    order: "DV01 then DV02 and DV03 in parallel; DV04; then DV05 and DV06 to DV11 in parallel; DV12 after DV06; DV13 after DV12; DV14 after DV07."
+    exit: "A project with chains on three tracks and the master renders identically native and wasm under 5 block sizes; demo hash unchanged; no_alloc passes; MCP can build the chain; the UI panel edits it; bench budgets set."
+  - wave: B
+    goal: "Dynamics, EQ and space: sidechain and latency alignment, compressor, limiter, equalizer with analyser, gate sidechain, wave folder with oversampler, room and plate reverb."
+    tasks: ["DV20", "DV21", "DV22", "DV23", "DV24", "DV25", "DV26", "DV27"]
+    order: "DV20 first; DV21, DV22, DV23, DV25, DV26, DV27 in parallel; DV24 after DV20 and DV09."
+    exit: "A mix with kick sidechained compressor, EQ on the bus and a limiter on the master sums aligned and renders identically native and wasm; all existing reverb goldens unchanged."
+  - wave: C
+    goal: "Instruments: slot and voice kit, analog style synth, phase synth, sampler, drum pads, soundfont node, layers, optional acid bass."
+    tasks: ["DV30", "DV31", "DV32", "DV33", "DV34", "DV35", "DV36", "DV37"]
+    order: "DV30 first; DV31, DV32, DV33, DV35 in parallel; DV34 after DV32; DV36 after DV34; DV37 last and optional."
+    exit: "The owner hears six synth presets and a drum kit and rates them above the stock voices; old projects play byte identical."
+  - wave: D
+    goal: "MIDI effects: chain runtime, transpose, velocity, note filter, scale snap, arpeggiator, chords, UI row."
+    tasks: ["DV40", "DV41", "DV42", "DV43", "DV44", "DV45"]
+    order: "DV40 first; DV41, DV42 in parallel; DV43 and DV44 after DV42; DV45 after DV41 and DV43."
+    exit: "A held chord through arpeggiator into the synth renders identically native and wasm and never leaves a stuck note across seek, loop wrap and edits."
+  - wave: E
+    goal: "Heavy and later: convolution, vocoder, pitch correction, neural amp (feasibility first), composites, groove, MIDI out, scripting design, web plugin host."
+    tasks: ["DV50", "DV51", "DV52", "DV53", "DV54", "DV55", "DV56", "DV57", "DV58", "DV59"]
+    order: "DV53 and DV58 research any time; DV50, DV51, DV52, DV55 after wave B; DV54 only after DV53 says go; DV59 last."
+
+risks:
+  - id: R1
+    risk: "Hash and file compatibility: every wave touches the model."
+    mitigation: "skip default hashing for empty chains and defaults, demo hash gate in every core task, fail closed loads with stable codes"
+    measure: "demo hash and existing goldens in CI, round trip tests"
+  - id: R2
+    risk: "Bit for bit determinism breaks when someone calls a std math function or the compiler fuses operations."
+    mitigation: "composer-dsp is the only math source; a grep test; a native versus wasm fingerprint test per device; no fma flags"
+    measure: "fingerprint tests in composer-wasm per device"
+  - id: R3
+    risk: "Control period of 32 frames steps fast parameter moves; some devices zipper (filter cutoffs, delay time)."
+    mitigation: "interpolate coefficients and delay offsets across the period inside devices; keep the period a constant from D36"
+    measure: "sweep discontinuity tests in DV23 and DV07"
+  - id: R4
+    risk: "Latency alignment complexity hides in the engine and makes sums wrong."
+    mitigation: "zero latency assertion in wave A, alignment built in DV20 with a latent test device and a byte identical zero latency regression"
+    measure: "alignment tests"
+  - id: R5
+    risk: "Memory per instance of reverbs, delays and convolvers times many tracks."
+    mitigation: "size from the sample rate at setup, report bytes per device in tests, env budgets, cap chain length and heavy device count"
+    measure: "bench memory budget"
+  - id: R6
+    risk: "Instruments built here may still sound stock to the owner."
+    mitigation: "preset review by ear after DV31 and DV33; sampler and soundfont path stays available (D34, D37)"
+    measure: "owner rating per preset"
+  - id: R7
+    risk: "Licence contamination from fitted tables or ported sources."
+    mitigation: "DX7 rule, inspired_by on every device task, no renders from commercial plugins stored"
+    measure: "review of each device PR against the licence_notes list"
+  - id: R8
+    risk: "Hosted plugins (WCLAP) are not deterministic and not reproducible offline."
+    mitigation: "flag plugin devices in the model, exclude from bit for bit tests, state bytes by hash, missing bundle handling"
+    measure: "plugin load failure rate in a session log"
+
+open_questions_for_owner:
+  - "Should the existing master reverb become a normal device (DV26) or stay a built in return? The plan keeps old files identical either way."
+  - "Is a scripting feature wanted at all (DV58), or should AI describe devices through commands and presets instead?"
+  - "Neural amp: is a guitar amp model in scope for a composition app or is it a niche to drop?"
+  - "Do you want sample accurate swing as a model concept (groove) before wave E, or as commands only?"
+  - "Pay for a commercial licence of the reference (D2) so ideas could be reused more directly, or stay clean room?"
+
+unverified:
+  - "Exact set of hash tags free in composer-model hash.rs (0xF0 to 0xF6 are used per the grep; confirm 0xF7 and above at implementation)."
+  - "Whether composer-wasm can host the device crate size within the web size limit (notes/web-limits.yaml); measure after DV04."
+  - "Cost of per sample processing for the eight tasks marked L or XL on a mid range phone; unknown until benchmarked."
+  - "The compressor upstream licence and the neural amp licences (see ref-opendaw-devices unverified)."

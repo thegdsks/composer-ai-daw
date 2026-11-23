@@ -1,0 +1,14 @@
+# Proposals channel (D27): post changes nothing, accept is one ai step, reject drops it.
+{"method":"session.new","params":{"name":"Prop","id":"000000000000000000000000000000f1"},"expect":{"undo_depth":0}}
+{"method":"state.hash","expect":{"state_hash":"086ad4484cea6f2c"}}
+{"method":"proposal.post","params":{"label":"Bass line","note":"One track","author":"script","commands":[{"command":"add_track","id":"000000000000000000000000000000a1","name":"Bass","kind":"instrument","index":null}]},"expect":{"id":"p1","status":"pending","would_change":true,"state_hash":"086ad4484cea6f2c"}}
+{"method":"state.hash","expect":{"state_hash":"086ad4484cea6f2c"}}
+{"method":"proposal.post","params":{"label":"Pad","commands":[{"command":"add_track","id":"000000000000000000000000000000a2","name":"Pad","kind":"instrument","index":null}]},"expect":{"id":"p2"}}
+{"method":"proposal.list","expect":{"pending":2}}
+{"method":"proposal.resolve","params":{"id":"p1","action":"accept"},"expect":{"status":"accepted","undo_depth":1}}
+{"method":"history.get","expect":{"total":1,"cursor":1}}
+{"method":"proposal.resolve","params":{"id":"p2","action":"reject"},"expect":{"status":"rejected","undo_depth":1}}
+{"method":"proposal.list","expect":{"pending":0}}
+{"method":"proposal.resolve","params":{"id":"p2","action":"accept"},"expect_error":{"data":{"code":"proposal_resolved"}}}
+{"method":"undo","expect":{"undo_depth":0}}
+{"method":"state.hash","expect":{"state_hash":"086ad4484cea6f2c"}}

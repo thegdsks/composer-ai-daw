@@ -1,0 +1,16 @@
+{
+  "name": "Blank",
+  "description": "A quiet empty page: one track and one four bar clip, ready for your first note.",
+  "tempo": 100,
+  "key": "C major",
+  "ticks_per_quarter": 960,
+  "loop": {"start": 0, "end": 15360},
+  "commands": [
+    {"command": "set_project_name", "name": "Untitled"},
+    {"command": "set_tempo", "tick": 0, "mbpm": 100000},
+    {"command": "add_track", "id": "$t1", "name": "Track 1", "kind": "instrument", "index": null},
+    {"command": "set_instrument", "track": "$t1", "instrument": "00000000000000000000000000000001"},
+    {"command": "set_track_sound", "track": "$t1", "sound": "builtin-soft-piano"},
+    {"command": "add_region", "id": "$r1", "track": "$t1", "start": 0, "length": 15360, "kind": "midi"}
+  ]
+}

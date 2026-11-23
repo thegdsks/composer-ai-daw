@@ -1,0 +1,49 @@
+# Facts come from web search, not from testing. verified: false means re-check on MDN or caniuse before relying on it.
+strategy: one engine, three tiers, same command API
+tiers:
+  - id: tier0_browser
+    runs: web app in any browser, installable as PWA
+    audio: AudioWorklet plus WASM engine
+    storage: OPFS in a worker; File System Access API only as a Chromium bonus
+    plugins: WCLAP (CLAP compiled to WASM) and built-in instruments
+  - id: tier1_shell
+    runs: Tauri shell around the same web app
+    adds: native file access, lower latency audio device selection
+  - id: tier2_daemon
+    runs: composerd, a local native process (same one the CLI and MCP use)
+    adds: native CLAP and VST3 hosting, ASIO and CoreAudio, big local files
+    link: web app talks to it over localhost WebSocket with a pairing step
+limits:
+  - topic: SharedArrayBuffer and threads
+    fact: needs cross-origin isolation (COOP and COEP response headers)
+    verified: false
+    action: serve with those headers from day one; test early
+  - topic: Safari SharedArrayBuffer inside AudioWorklet
+    fact: WebKit bug and Apple forum report that changes were not seen in a worklet
+    verified: false
+    action: test on current Safari before choosing the audio thread design; keep a message-passing fallback
+  - topic: round-trip latency
+    fact: a 2021 W3C talk cited under 30 ms best case for monitoring, under 10 ms desired
+    verified: false
+    action: record from MIDI and instruments (low sensitivity); live audio monitoring is a tier2 feature
+  - topic: file access
+    fact: OPFS works in Firefox 111+ and Safari 15.2+; pickers are Chromium only
+    verified: false
+    action: copy imported audio into OPFS; export as downloads
+  - topic: Web MIDI
+    fact: Safari status not found in research
+    verified: false
+    action: check before promising MIDI keyboard input on Safari
+  - topic: WCLAP
+    fact: early standard, WASM CLAP plugins run in the browser; openDAW hosts them
+    verified: false
+    action: ref-scout reads WebCLAP/browser-test-host; treat as experimental
+  - topic: plugin hosting for VST3 and AU
+    fact: not possible in browser
+    action: tier2 daemon
+sources:
+  - https://github.com/WebCLAP
+  - https://buttondown.com/opendaw/archive/opendaw-now-runs-webclap-plugins/
+  - https://web.dev/opfs
+  - https://bugs.webkit.org/show_bug.cgi?id=237144
+  - https://www.w3.org/2021/03/media-production-workshop/talks/ulf-hammarqvist-audio-latency.html

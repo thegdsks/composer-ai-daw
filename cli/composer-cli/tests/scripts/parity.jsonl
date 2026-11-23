@@ -1,0 +1,21 @@
+# T17 parity: mix, bulk notes, clip edits and the read methods, asserting project state each step.
+{"method":"session.new","params":{"name":"Parity","id":"000000000000000000000000000000f2"},"expect":{"undo_depth":0}}
+{"method":"command.apply","params":{"command":{"command":"add_track","id":"000000000000000000000000000000a1","name":"Keys","kind":"instrument","index":null}},"expect":{"undo_depth":1}}
+{"method":"command.apply","params":{"command":{"command":"add_region","id":"000000000000000000000000000000b1","track":"000000000000000000000000000000a1","start":0,"length":3840,"kind":"midi"}},"expect":{"undo_depth":2}}
+{"method":"command.apply","params":{"command":{"command":"add_notes","region":"000000000000000000000000000000b1","notes":[{"id":"000000000000000000000000000000c1","pitch":60,"velocity":100,"start":10,"duration":400},{"id":"000000000000000000000000000000c2","pitch":64,"velocity":100,"start":2000,"duration":400}]}},"expect":{"undo_depth":3,"changed":true}}
+{"method":"command.apply","params":{"dry_run":true,"command":{"command":"transpose_notes","region":"000000000000000000000000000000b1","semitones":7,"notes":null}},"expect":{"dry_run":true,"would_change":true}}
+{"method":"command.apply","params":{"command":{"command":"transpose_notes","region":"000000000000000000000000000000b1","semitones":7,"notes":null}},"expect":{"undo_depth":4}}
+{"method":"command.apply","params":{"command":{"command":"quantize_notes","region":"000000000000000000000000000000b1","grid":960,"strength":100,"notes":null}},"expect":{"undo_depth":5}}
+{"method":"command.apply","params":{"command":{"command":"split_region","region":"000000000000000000000000000000b1","at":1920,"new_region":"000000000000000000000000000000b2","note_ids":[]}},"expect":{"undo_depth":6}}
+{"method":"command.apply","params":{"command":{"command":"set_track_volume","track":"000000000000000000000000000000a1","volume":800}},"expect":{"undo_depth":7}}
+{"method":"command.apply","params":{"command":{"command":"set_track_mute","track":"000000000000000000000000000000a1","mute":true}},"expect":{"undo_depth":8}}
+{"method":"project.tree","params":{"notes":true},"expect":{"tree":{"track_count":1,"span_ticks":3840}}}
+{"method":"selection.set","params":{"regions":["000000000000000000000000000000b2"]},"expect":{"selection":{"regions":["000000000000000000000000000000b2"]}}}
+{"method":"selection.get","expect":{"selection":{"tracks":[]}}}
+{"method":"transport.set","params":{"tick":3840},"expect":{"playhead_tick":3840,"playhead_seconds":2.0,"playing":false}}
+{"method":"meters.measure","params":{"sample_rate":8000,"tail_seconds":0.1},"expect":{"offline":true,"master":{"peak":0.0}}}
+{"method":"render.wav","params":{"path":"never-written.wav","dry_run":true,"sample_rate":8000,"tail_seconds":0.5},"expect":{"dry_run":true,"sample_rate":8000}}
+{"method":"project.save","params":{"path":"never-written.cmpf","dry_run":true},"expect":{"dry_run":true}}
+{"method":"project.save","params":{"path":"../escape.cmpf"},"expect_error":{"data":{"code":"path_invalid"}}}
+{"method":"undo","expect":{"applied":true,"undo_depth":7}}
+{"method":"project.tree","expect":{"tree":{"track_count":1,"tracks":"@any"}}}

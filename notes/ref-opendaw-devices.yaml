@@ -1,0 +1,913 @@
+# R05 device level reference map of openDAW (stock devices). Facts come from reading code and plans in
+# <reference checkout>/opendaw (clone commit in notes/ref-opendaw.yaml meta). Paths in src: are relative to that clone.
+# Source is AGPL-3.0-or-later with a commercial licence offer. Behavior is described in our words; nothing is copied.
+# Tags: borrow (take the idea), avoid (do not repeat), rethink (idea is good, their way does not fit our rules).
+# Our rules that decide most tags: deterministic, bit for bit native and wasm, no allocation in the audio path,
+# one command API, state_hash, plain names in the UI (no brand names).
+
+meta:
+  id: R05
+  date: 2026-11-23
+  scope: "every stock device in the owner list that exists in the clone, plus the shared device contract they run on"
+  builds_on: ["notes/ref-opendaw.yaml (engine_flow, devices.common_pattern)", "notes/ref-opendaw-ui.yaml", "notes/ref-webclap.yaml"]
+  how_to_read: "framework section first (shared rules), then devices grouped by slot kind. Each device lists purpose, parameters, signal flow, chain position, automation and storage, state, edge cases, avoid, licence, tag."
+  param_notation: "name = default, range, unit, curve. Curves: lin, exp (log feel), pow (bent), db (volume style bend), idx (integer index into a table), bool. Real ranges come from the box schema constraints, but automation mapping in the device code is the truth (see framework.parameters)."
+  src_schema_root: packages/studio/forge-boxes/src/schema/devices
+  src_device_root: crates/stock-devices
+  src_dsp_root: crates/dsp/src
+  not_found_in_refs:
+    - "Chord device: no chord MIDI effect exists. Chords appear only as arpeggiator input (follow chord track) and as the harmony track (key and chord events). Wave D chord device is our own design."
+    - "Tape character DSP: the Tape instrument schema carries flutter, wow, noise and saturation parameters (defaults 0.2, 0.05, 0.02, 0.5) but no DSP using them was found in crates or the engine. Treated as reserved fields (unverified)."
+    - "Stereo Split has no device crate: it is a registration of the generic effect composite with a per channel distributor."
+    - "Mastering (extra, not in owner list) exists but is GPL-3.0 (Matchering), studio only. Korpus and Tubular also exist (extras, see extras section)."
+
+we_call_it:
+  note: "Plain names for our code and UI. Brand style names stay out of the UI (ui-plan U07 rule)."
+  map:
+    - {theirs: Apparat, we_call_it: script_instrument}
+    - {theirs: Arpeggio, we_call_it: arpeggiator}
+    - {theirs: Autotune, we_call_it: pitch_corrector}
+    - {theirs: "Composite (instrument)", we_call_it: layer_rack}
+    - {theirs: Convolver, we_call_it: impulse_reverb}
+    - {theirs: Crusher, we_call_it: bit_crusher}
+    - {theirs: Cubed, we_call_it: acid_bass}
+    - {theirs: "Dattorro Reverb", we_call_it: plate_reverb}
+    - {theirs: Delay, we_call_it: stereo_delay}
+    - {theirs: Fold, we_call_it: wave_folder}
+    - {theirs: "Free Reverb", we_call_it: room_reverb}
+    - {theirs: "Frequency Split", we_call_it: band_split}
+    - {theirs: "FX Composite", we_call_it: parallel_fx_rack}
+    - {theirs: Gate, we_call_it: noise_gate}
+    - {theirs: Maximizer, we_call_it: limiter}
+    - {theirs: "MIDI Output", we_call_it: midi_out}
+    - {theirs: Nano, we_call_it: single_sampler}
+    - {theirs: Neon, we_call_it: pd_synth}
+    - {theirs: Pitch, we_call_it: transpose}
+    - {theirs: Playfield, we_call_it: drum_sampler}
+    - {theirs: Revamp, we_call_it: eq}
+    - {theirs: Soundfont, we_call_it: soundfont_player}
+    - {theirs: Spielwerk, we_call_it: script_midi_fx}
+    - {theirs: "Stereo Split", we_call_it: channel_split}
+    - {theirs: "Stereo Tool", we_call_it: stereo_tool}
+    - {theirs: Tape, we_call_it: audio_player}
+    - {theirs: Tidal, we_call_it: auto_pan}
+    - {theirs: Tone3000, we_call_it: amp_model (service) over neural_amp (device)}
+    - {theirs: Vaporisateur, we_call_it: subtractive_synth}
+    - {theirs: Velocity, we_call_it: velocity_shaper}
+    - {theirs: Vocoder, we_call_it: vocoder}
+    - {theirs: Waveshaper, we_call_it: waveshaper}
+    - {theirs: Werkstatt, we_call_it: script_fx}
+    - {theirs: Zeitgeist, we_call_it: groove_warp}
+    - {theirs: Compressor, we_call_it: compressor}
+    - {theirs: WCLAP, we_call_it: web_plugin_host}
+    - {theirs: "PIC side module device", we_call_it: device module}
+    - {theirs: "ParamValue unit / real", we_call_it: unit value (0..1 automation space) / real value}
+    - {theirs: "bind_parameter", we_call_it: register parameter}
+    - {theirs: "observe_field", we_call_it: watch setting (non automatable)}
+    - {theirs: "Broadcast / editor telemetry slot", we_call_it: meter feed}
+    - {theirs: "PDC (delay compensation)", we_call_it: latency alignment}
+
+framework:
+  summary: "Every stock device is the same small contract: a fixed state block, a list of registered parameters pushed by id, optional watched settings, an event or audio process call per block, a reset on transport stop, and optional latency. The engine owns the chain wiring, bypass, sidechain and alignment, the device owns its DSP and its own value mappings."
+  device_kinds:
+    what: "Three kinds: instrument (events in, audio out), audio effect (audio in, audio out, optional sidechain), MIDI effect (events in, events out, a pull source ahead of the instrument)."
+    chain_shape: "Per channel: one instrument slot, then a MIDI effect list in front of it (pulled by the instrument), then an audio effect list after it, then the channel strip. Master is the same minus the instrument."
+    common_fields: "Every device has enabled (default true), minimized (UI only), label, and a position index among siblings. Instruments have an icon instead of an index."
+    src: ["packages/studio/forge-boxes/src/schema/std/DeviceFactory.ts:10-45", "crates/abi/src/lib.rs:1623-1900"]
+    tag: borrow
+    note: "Our equivalent: a Device node per chain slot with id, kind, enabled, order index and a typed parameter list. Plain data, no UI fields in the hash."
+  parameters:
+    two_value_spaces: "A parameter reaches a device as a unit value (0..1, used by automation) or as a real value (what a knob stores). The device maps unit to real itself with its own mapping (linear, exponential, power, decibel bend, integer, table, bool). A modulated form carries a base plus a modulation sum."
+    consequence: "Automation lanes are stored in unit space, so widening a range or inserting an enum entry silently changes old automation. They needed a version field and a migration pass (arpeggio mode range widening)."
+    src: ["crates/abi/src/lib.rs:160-166", "crates/math/src/value_mapping.rs", "plans/arpeggio-enhanced.md:112-135", "crates/stock-devices/device-delay/src/lib.rs:56-75"]
+    tag: rethink
+    our_rule: "Store automation points in real units of a stable parameter id plus a parameter schema version. A range change ships a migration. Keep unit mapping as a UI concern only."
+    mapping_drift_trap: "Schema ranges and the device mapping can disagree (gate floor is a bent decibel curve in the device but a plain linear range in the schema). Whoever reads the schema alone is wrong."
+    src_drift: ["crates/stock-devices/device-gate/src/lib.rs:44-56", "packages/studio/forge-boxes/src/schema/devices/audio-effects/GateDeviceBox.ts"]
+    tag_drift: avoid
+  parameter_ids:
+    what: "Parameters are bound by a short path of integer keys at init and get a small id back. Keys are persisted, deprecated keys are kept and never reused with another type. A device checks its ids by position, so bind order is a compatibility contract (the parity probe maps ids in bind order)."
+    src: ["packages/lib/box/src/serializer.ts:11-14", "crates/stock-devices/device-stereo-tool/src/lib.rs:55-62", "plans/arpeggio-enhanced.md:112-120"]
+    tag: borrow
+    our_rule: "A parameter id is a stable small integer per device type, never reused, plus a name. New parameters append. The id is what lands in automation targets, commands and the state hash."
+  settings_vs_parameters:
+    what: "Some fields are plain settings the device only watches (waveshaper curve name, fold oversampling factor, stereo pan law, limiter lookahead flag, vocoder band count, filter order). They are not automatable, a change rebuilds internals."
+    src: ["crates/stock-devices/device-waveshaper/src/lib.rs:8-10", "crates/stock-devices/device-fold/src/lib.rs:5-7"]
+    tag: borrow
+    note: "Good split: anything that resizes state or changes latency is a setting, everything else a parameter."
+  smoothing_and_first_delivery:
+    what: "Gain like parameters glide (linear ramp about 5 ms, one pole about 3 ms) so edits do not click, but the first value after load or reset jumps, not glides (a processed flag). Parameters that only select a table index or a mode jump."
+    src: ["crates/dsp/src/ramp.rs:1-60", "crates/stock-devices/device-waveshaper/src/lib.rs:70-120", "crates/dsp/src/smooth.rs"]
+    tag: borrow
+    detail: "Ramp set is a no-op if already at target (does not restart a glide). The ramp snaps exactly to target on the last step to avoid error build up."
+  automation_clock:
+    what: "Devices see automated values on a fixed musical grid (UPDATE_CLOCK_RATE = 10 pulses at 960 per quarter), not per sample. Blocks are split at update positions. With latency alignment the grid is read at position minus arrival so a latent device stays aligned."
+    src: ["crates/dsp/src/ppqn.rs:9-21", "crates/engine-env/src/update_clock.rs", "plans/delay-compensation.md:60-68"]
+    tag: rethink
+    our_rule: "We already use a frame based control period (32 frames, D36) derived from the absolute frame counter, which is independent of tempo and block size. Keep it. Document that tempo synced devices read tempo per block, and that latent devices read automation at frame minus their latency."
+  reset:
+    what: "Transport stop calls reset: tails, envelopes, filter memories, detectors cleared, delay lines zeroed (only if they were ever written), processed flag cleared so the next first delivery jumps."
+    src: ["crates/stock-devices/device-delay/src/delay_dsp.rs:84-103", "crates/stock-devices/device-gate/src/lib.rs:150-160"]
+    tag: borrow
+    determinism_note: "Offline render must start from reset state, so render of the same project is identical regardless of what played before."
+  bypass:
+    what: "A disabled effect is skipped in the chain wiring only. Its state is kept, parameters are not re-pushed, and nothing resets. It does not process while bypassed, so on re enable its tail memory is stale (old delay content, old reverb ring)."
+    src: ["crates/engine/src/audio_unit/mod.rs:103-105", "1342-1347"]
+    tag: rethink
+    our_rule: "Define bypass precisely: either clear state on disable (cheap, deterministic) or keep processing silently. Pick clear on disable, plus a short crossfade (about 5 ms) between dry and wet path to avoid clicks. A bypass toggle is an edge in the state hash and must not depend on history."
+  latency:
+    what: "A device reports its latency in frames (lookahead limiter, compressor lookahead, fold oversampling, pitch corrector). The engine computes arrival times over the graph and inserts compensation delays only at junctions (sums, sends, sidechain, composite dry/wet), capped at 0.1 s, zero cost when nothing is latent."
+    src: ["plans/delay-compensation.md:21-100", "155-160", "crates/abi/src/lib.rs:182"]
+    tag: borrow
+    lookahead_toggle: "Toggling lookahead changes latency by a few ms. They crossfade between the immediate and the delayed path over 15 ms instead of jumping."
+    src_toggle: ["crates/stock-devices/device-maximizer/src/lib.rs:36-38", "crates/stock-devices/device-compressor/src/lib.rs:70-74"]
+    our_rule: "Wave A framework carries a latency field per device and alignment at sum points. Until a latent device exists, assert latency 0 and have a test that the engine output is unchanged."
+  sidechain:
+    what: "A device may declare a sidechain input (optional pointer to another output). Inputs are resolved by port id: main through signal first, sidechain next. Absent sidechain means detect on the main input. Sidechain edges order the graph but never raise the arrival time of the consumer."
+    users: ["compressor", "noise_gate", "vocoder"]
+    src: ["crates/stock-devices/device-gate/src/lib.rs:5-12", "194-198", "plans/delay-compensation.md:48-52"]
+    tag: borrow
+  telemetry:
+    what: "Devices write small meter slots (levels, reduction, spectrum, LFO phase) into shared memory that the UI reads only while a view subscribes. The analyser and meter work is skipped when nobody listens."
+    src: ["crates/stock-devices/device-revamp/src/lib.rs:176-190", "crates/stock-devices/device-maximizer/src/lib.rs:117-130"]
+    tag: borrow
+    our_rule: "Meter feed is output only, never an input to audio, never in state_hash. Gate it behind a subscribed flag so offline render pays nothing and stays identical."
+  voices:
+    what: "Instruments use a shared voice allocator: fixed pool, poly or mono mode switchable at runtime, oldest voice stolen when full, stolen voice fades out in a small spare area (about 3 ms) so a steal does not click, mono keeps a stack of held notes with legato glide, unison fans N detuned voices with equal power gain 1/sqrt(N)."
+    src: ["crates/voicing/src/lib.rs:1-100", "208-215", "293-320", "462-490"]
+    tag: borrow
+    caps_seen: "Subtractive synth 16 poly voices, mono stack 16, unison widths 1/3/5; single sampler 64 voices; drum pad 16 voices per pad."
+    gotcha: "Retriggering a mono voice that is still releasing must start on a fresh slot and let the old one finish its fade, else the envelope reset clicks."
+  midi_events:
+    what: "MIDI effects work in tick (pulse) positions. Each note on carries an id, pitch, cent, velocity; the matching note off carries the same id. Devices that rewrite a note remember the rewritten pitch by id and replay it on the off, so editing a parameter mid note never leaves a stuck note. A shifted pitch outside 0..127 drops the note (never clamps). Output order at equal tick is off before on (keeps mono synths legato at gate 100 percent)."
+    src: ["crates/stock-devices/device-pitch/src/lib.rs:1-15", "40-85", "crates/stock-devices/device-note-filter/src/lib.rs:1-4", "plans/arpeggio-enhanced.md:46-60", "plans/midi-composite.md:12-35"]
+    tag: borrow
+    chance_note: "Chance (probability) must be deterministic per note identity (hash of note id and cycle), not a running random stream, so every branch and every re read agrees."
+    tag_chance: borrow
+  determinism_observations:
+    findings:
+      - "Math goes through libm on every target (native and wasm), because std transcendentals differ. Their cubed device says this explicitly."
+      - "Control math often f64, audio f32, filters f64 coefficients. Order of operations is pinned because the Rust port must match an older TS version float for float."
+      - "A fast exp2/log2 polynomial is used in hot paths (compressor dB conversion) with identical literals on both engines."
+      - "Several devices keep a free running phase or random state; random sources are seeded (mulberry style 32 bit)."
+    src: ["crates/stock-devices/device-cubed/src/lib.rs:12-14", "crates/dsp/src/ctagdrc.rs:8-20", "crates/dsp/src/vocoder.rs:9-12", "crates/stock-devices/device-velocity/src/lib.rs:10-12"]
+    tag: borrow
+    our_rule: "Use our own libm style pure Rust math (no std tanh, exp, sin in audio code), no fast_math tables with platform variance, f32 audio, integer or f64 control, and a per device golden hash test."
+  no_alloc:
+    what: "Device state is one zeroed block sized by the device for the sample rate; large state is initialised in place (no stack temporaries bigger than a few hundred KB); rate sized buffers use a flexible tail sized as a function of sample rate."
+    src: ["crates/stock-devices/device-delay/src/lib.rs:5-11", "crates/dsp/src/freeverb.rs:55-70", "crates/dsp/src/dattorro.rs:55-70"]
+    tag: borrow
+    note: "Their Freeverb and plate reverb are sized for 48 kHz and clamped, so higher rates detune or shorten. Avoid: size from sample rate at setup."
+  versioning:
+    what: "Devices whose parameter semantics changed carry an integer version field (delay, arpeggio, subtractive synth, acid bass at key 99) and a migration runs on project load and preset load. Defaults of every new field reproduce the old behavior (legacy parity test)."
+    src: ["packages/studio/forge-boxes/src/schema/devices/audio-effects/DelayDeviceBox.ts:56", "plans/arpeggio-enhanced.md:112-135", "crates/stock-devices/device-nano/tests/legacy_parity.rs"]
+    tag: borrow
+  composites:
+    what: "A composite device hosts child chains in parallel. Three families share one engine mechanism: effect composite (broadcast input), stereo split (entry 0 reads left only, entry 1 right only, untouched sum is bit exact input), frequency split (entry i reads band i from crossover filters with allpass phase compensation, untouched sum is a flat allpass). Each entry has its own chain and a strip (gain dB, pan, mute, solo); the composite has dry and wet gain (dry default minus infinity). A missing entry reads silence. Nesting is unlimited."
+    src: ["crates/engine/src/effect_composite.rs:1-60", "crates/engine-env/src/composite_mix.rs:36-110", "packages/studio/forge-boxes/src/schema/devices/audio-effects/FrequencySplitBox.ts", "plans/effect-stack.md:1-20"]
+    tag: borrow
+    edge_cases:
+      - "Mute is a gate at the strip; the child keeps running so unmute is instant and in phase."
+      - "A stray extra entry in a corrupt project must read silence, not double a channel."
+      - "Frequency split band count change reconfigures the crossover cascade and must fade in click free."
+      - "Entry order in the chain is an explicit index, not array order."
+  presets:
+    what: "A preset is a device (or chain) subtree serialised with its resources and a version, loaded through the same migration as projects."
+    src: ["packages/studio/core/src/presets/PresetBundle.ts", "plans/preset-folders.md"]
+    tag: borrow
+  build_effort_hint: "Adding a device touched five places in their repo (schema, adapter, factory, DSP crate, build list). For us it is one device module in core plus one describe entry; the UI generates its panel from the parameter list."
+  scripted_devices_warning: "Script devices run user JavaScript in the audio worklet: unbounded time, no determinism, cannot run native or offline the same way. See script_fx entry."
+
+devices:
+  effects_cheap:
+    - id: stereo_tool
+      theirs: StereoTool
+      kind: audio effect
+      purpose: "Volume, balance, width (mono to wide), per channel polarity invert, left right swap."
+      params:
+        - "volume = 0 dB, -72..+12 dB, db curve with mid at 0 dB"
+        - "panning = 0, -1..+1, lin bipolar"
+        - "stereo width = 0, -1 (full mono)..+1 (wide), lin bipolar"
+        - "invert left = false, bool"
+        - "invert right = false, bool"
+        - "swap = false, bool"
+        - "pan law = linear (setting, not automatable), choices linear or equal power"
+      signal_flow: "One 2x2 matrix built from the parameters, applied per sample. Pan gains first (linear law: each side stays unity toward the center, so the louder side is unity and the other attenuates; equal power: cosine and sine), times gain, polarity flips, then a mid side width stage (negative folds toward mono, positive raises side and lowers mid), then optional channel swap."
+      chain_position: "any audio effect slot, also usable on master"
+      automation_and_storage: "6 automatable params, 1 setting. Matrix recomputed only when something changed; the matrix glides over 5 ms, but the first delivery jumps."
+      state: "matrix coefficients and the processed flag. No tail, no latency."
+      edge_cases:
+        - "Mono fold at stereo = -1 sums both channels equally: left only input yields equal output on both sides."
+        - "Linear pan law means centered gain is unity per channel (louder than equal power at center by design)."
+        - "Volume at the bottom of the range maps to minus infinity gain (db curve), plan for an exact silence at the minimum."
+      avoid: "Nothing. Smallest good first device and a good test of the framework."
+      licence: "Own work, textbook mid side."
+      tag: borrow
+      we_call_it: stereo_tool
+      src: ["crates/stock-devices/device-stereo-tool/src/lib.rs:1-140", "crates/dsp/src/panning.rs:1-100", "crates/dsp/src/ramp.rs:67-130"]
+    - id: stereo_delay
+      theirs: Delay
+      kind: audio effect
+      purpose: "Stereo delay, tempo synced or in milliseconds, with feedback, cross feedback, a combined low or high pass in the feedback path, a slow wobble (LFO) on the read position, an input pre delay per side, a limiter on the return."
+      params:
+        - "delay time (musical) = index 13 of 21, idx; table starts at off then 1/128 up to 1/1 (a bar); this sets the main delay along with the next"
+        - "delay time (ms) = 0, 0..1000 ms, lin; added on top of the musical value"
+        - "pre delay left musical = index 8, idx; pre delay left ms = 0, 0..1000 ms, bent so 100 ms is mid"
+        - "pre delay right musical = 0 (off); pre delay right ms = 0, same bend"
+        - "feedback = 0.5, 0..1 lin"
+        - "cross = 1.0, 0..1 lin (how much of each return feeds the other side)"
+        - "filter = 0, -1..+1 lin bipolar: 0 bypass, positive high pass, negative low pass, cutoff exponential over 20..20000 Hz"
+        - "wet = -6 dB, dry = 0 dB, default volume dB curve (-72 mid -12 max 0)"
+        - "lfo speed = 0.1, 0.1..5 Hz exp; lfo depth = 0, 0..50 ms, power curve exponent 4"
+      signal_flow: "Input goes through the per side pre delay into a circular line per channel. Read position = write position minus (main offset plus smoothed LFO depth minus triangle LFO), fractional read by linear interpolation. The return is peak limited (envelope above 1.0 divides), cross mixed by cross amount, scaled by 0.96, passed through one shared biquad, then written back with feedback gain. Output = input times dry plus return times wet. The cell after the write head is cleared so stale data never returns on wrap."
+      chain_position: "any audio effect slot; typically send style or insert"
+      automation_and_storage: "Sync indices are stored as float indices; automated unit values snap to the index. Delay time changes glide over 0.25 s (interpolation length) once running; before the first block they jump. A version field exists for a past migration."
+      state: "Four ring buffers sized as the next power of two of (one bar at 30 bpm + 1 s + 50 ms) at the sample rate, so large (about 2 MB per instance at 48 kHz in f32). Tail survives loop wraps and seeks, cleared only on transport stop."
+      edge_cases:
+        - "Time glide over 250 ms makes tempo changes pitch bend the repeats (tape like); is the stated intent."
+        - "The return limiter envelope coefficients are built from 50 and 250 used as if they were seconds (they read as milliseconds), giving time constants of tens of seconds, so the limiter barely follows the signal and is effectively inert. Treat as a bug, do not replicate."
+        - "A strange add and subtract of a tiny constant is a denormal guard; use our own flush to zero rule."
+        - "Max delay is capped by buffer size: tempo below 30 bpm clamps."
+        - "Delay lines are not cleared on discontinuity (seek or loop wrap), so the echo tail crosses the boundary on purpose."
+      avoid: "Limiter envelope time unit bug (return limiter nearly inert); the 1e-18 dither trick; per sample f64 inner loop cost."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: stereo_delay
+      src: ["crates/stock-devices/device-delay/src/lib.rs:1-260", "crates/stock-devices/device-delay/src/delay_dsp.rs:1-200", "crates/stock-devices/device-delay/src/delay.rs", "crates/stock-devices/device-delay/src/fractions.rs", "packages/studio/forge-boxes/src/schema/devices/audio-effects/DelayDeviceBox.ts"]
+    - id: bit_crusher
+      theirs: Crusher
+      kind: audio effect
+      purpose: "Sample rate reduction and bit depth reduction."
+      params:
+        - "crush = 0, 0..1 lin; internally inverted: 1 means maximum reduction. The crushed sample rate runs exponentially from Nyquist down to 20 Hz"
+        - "bits = 16, 1..16, integer"
+        - "boost = 0 dB, 0..24 dB lin (drive into the quantiser, compensated at the output by half the boost)"
+        - "mix = 1.0, 0..1 lin"
+      signal_flow: "Stereo low pass (Butterworth) at the crushed rate to limit aliasing (cutoff floor 1 kHz), then sample and hold at the crushed rate with a fractional phase counter, held value is multiplied by boost, rounded to 2^bits - 1 steps and clamped, then dry wet mix, then output gain of minus half the boost in dB."
+      chain_position: "any audio effect"
+      automation_and_storage: "4 params. A crush change glides the crushed rate over 20 ms after the first block, else jumps."
+      state: "two biquads, held samples, phase counter, rate ramp state. No tail beyond the filter, no latency."
+      edge_cases:
+        - "Crush ratio is fixed per block while the rate glides (rate steps once per quantum in the hold step, filter moves every sample)."
+        - "bits = 1 snaps outputs to -1, 0, 1 steps (tested)."
+        - "Mix 0 passes dry exactly but still applies the output gain compensation; check that boost 0 is unity."
+        - "The anti alias filter cutoff follows the rate, so at low crush values it is a Nyquist filter and is nearly transparent."
+      avoid: "Rate fixed per block quirk (pick per sample or per 32 frame control period); rounding with libm round (use our own deterministic round half away)."
+      licence: "Own work, textbook."
+      tag: borrow
+      we_call_it: bit_crusher
+      src: ["crates/stock-devices/device-crusher/src/lib.rs:1-110", "crates/dsp/src/crusher.rs:1-180"]
+    - id: noise_gate
+      theirs: Gate
+      kind: audio effect with optional sidechain
+      purpose: "Close the signal below a threshold with hold and smooth open and close, optional external detector, optional inverse (duck when loud)."
+      params:
+        - "threshold = -6 dB, -80..0 dB lin"
+        - "return (hysteresis) = 0 dB, 0..24 dB: the close threshold is threshold minus return"
+        - "attack = 1 ms, 0..1000 ms lin"
+        - "hold = 50 ms, 0..500 ms lin"
+        - "release = 100 ms, 1..2000 ms lin"
+        - "floor = -72 dB, -72..0 dB, three point db curve (mid -12 dB) in the device, linear in the schema"
+        - "inverse = false, bool"
+        - "side chain = none, optional input pointer"
+      signal_flow: "Detector level = max of absolute left and right of the sidechain, or of the main input when none. A peak follower with 10 ms decay. State machine: level at or above open threshold opens and reloads the hold counter; while open and counting, the counter runs down; below return threshold and hold finished closes. Target is 1 when (inverse xor open), smoothed by one pole attack when rising, release when falling. Gain = floor + (1 - floor) * envelope applied to the main signal."
+      chain_position: "any audio effect slot; sidechain port reads another output"
+      automation_and_storage: "7 params plus sidechain reference; derived coefficients recomputed only when a parameter is dirty. Three values broadcast for the UI (input dB, output dB, envelope dB)."
+      state: "detector peak, open flag, hold counter, envelope. Starts closed and silent after reset. No latency (no lookahead), so the first transient after silence is clipped by the attack time."
+      edge_cases:
+        - "A zero attack produces coefficient zero (instant)."
+        - "Hold counter resets on every above threshold sample, so chatter near the threshold keeps it open (that is the hysteresis intent)."
+        - "Floor at minus 72 dB still leaks; floor to minus infinity needs a special case if we want true silence."
+        - "Gate state is derived from the sidechain; with sidechain connected and silent, the main signal stays gated."
+      avoid: "Schema versus device mapping disagreement for floor; keep one mapping in our parameter table."
+      licence: "Own work, textbook."
+      tag: borrow
+      we_call_it: noise_gate
+      src: ["crates/stock-devices/device-gate/src/lib.rs:1-250", "packages/studio/forge-boxes/src/schema/devices/audio-effects/GateDeviceBox.ts"]
+    - id: waveshaper
+      theirs: Waveshaper
+      kind: audio effect
+      purpose: "Nonlinear distortion by a selectable transfer curve."
+      params:
+        - "equation = hard clip, a name from six (hard clip, soft cubic, tanh, sigmoid, arctan, asymmetric); a setting, unknown name falls back to tanh"
+        - "input gain = 0 dB, 0..40 dB lin"
+        - "output gain = 0 dB, -24..+24 dB lin"
+        - "mix = 1.0, 0..1 lin"
+      signal_flow: "per sample: input times smoothed input gain, curve, times smoothed output gain on the wet path, then crossfade with the untouched dry by the smoothed mix (dry = 1 - mix)."
+      chain_position: "any audio effect slot"
+      automation_and_storage: "3 params + 1 string setting. All three glide over 5 ms; the first delivery jumps."
+      state: "three ramps only. No tail, no latency."
+      edge_cases:
+        - "No oversampling, so high drive aliases; the wave folder offers oversampling, waveshaper does not."
+        - "Curves: hard clip clamps; soft cubic is 1.5x - 0.5x^3 on a clamped input; sigmoid is sign times one minus exp of minus abs; asymmetric is rational for positive input and a smoothed knee to a hard floor of -1 for negative input."
+        - "Output of tanh or sigmoid at gain 1 is below full scale, so loud input stays under 1 but output gain can exceed it."
+      avoid: "String equation names as a stored id (store an enum index plus name map)."
+      licence: "Own work, public math."
+      tag: borrow
+      we_call_it: waveshaper
+      src: ["crates/stock-devices/device-waveshaper/src/lib.rs:1-150", "crates/dsp/src/waveshaper.rs:20-60"]
+    - id: auto_pan
+      theirs: Tidal
+      kind: audio effect
+      purpose: "Tempo synced tremolo and auto pan with a shaped waveform."
+      params:
+        - "rate = index 3 of 17, idx into fractions from 1/1 down to 1/128 (includes triplets and dotted values)"
+        - "depth = 1.0, 0..1 lin"
+        - "slope = -0.25, -1..+1 lin bipolar (curve skew; sign mirrors the shape)"
+        - "symmetry = 0.5, 0..1 lin (where in the cycle the peak sits)"
+        - "offset = 0 degrees, -180..180 (phase of the left channel)"
+        - "channel offset = 0 degrees, -180..180 (extra phase of the right channel; this is what pans)"
+      signal_flow: "Phase = song position in ticks divided by the period of the chosen fraction, plus offsets over 360. A shaped envelope function maps phase to a gain between (1 - depth) and 1 using a power law whose exponent is 2^(10 * abs(slope)), with two segments split at the symmetry point. One pole smoothing of 3 ms on each channel gain, then multiply."
+      chain_position: "any audio effect slot"
+      automation_and_storage: "6 params; depth, slope and symmetry recompute the shape lazily next block. Phase is derived from the transport position, so it is locked to the grid and identical after a seek."
+      state: "two smoothers; the exposed LFO phase is UI only. No tail, no latency."
+      edge_cases:
+        - "Depth 0 returns unity gain exactly."
+        - "Symmetry is nudged off 0 and 1 to keep reciprocals finite."
+        - "Phase advances only while the transport plays (UI phase), but the audio phase uses position, so it also runs while paused if the engine feeds a free running position."
+        - "Tempo changes mid block use the block tempo for the whole block."
+        - "Uses f64 and libm exp2/log2 for the power law because it is the hot spot."
+      avoid: "Rate stored as a float index; store an integer enum."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: auto_pan
+      src: ["crates/stock-devices/device-tidal/src/lib.rs:1-215", "crates/dsp/src/tidal.rs:1-60", "packages/studio/forge-boxes/src/schema/devices/audio-effects/TidalDeviceBox.ts"]
+    - id: wave_folder
+      theirs: Fold
+      kind: audio effect
+      purpose: "Wave folding distortion with anti aliasing by oversampling."
+      params:
+        - "drive = 0 dB, 0..30 dB lin"
+        - "volume = 0 dB, -18..0 dB lin"
+        - "oversampling = 2x (setting), choices 2x, 4x, 8x"
+      signal_flow: "Upsample with a polyphase half band filter (31 tap), then per oversampled sample: scale by drive into 0.25 x + 0.25, triangle wrap by absolute value of the distance to the nearest integer, rescale by 4 times (wrapped minus 0.25), multiply by volume, then downsample with the half band."
+      chain_position: "any audio effect slot"
+      automation_and_storage: "2 params + 1 setting; both gains glide at the oversampled rate; a factor change rebuilds resampler and ramps."
+      state: "resampler history, two ramps. Reports latency from the resampler (frames), so the device is latent."
+      edge_cases:
+        - "The fold function is odd symmetric and periodic, so it never exceeds the unit range."
+        - "Their half band coefficients were truncated by a JS typed array bug that the Rust port replicated on purpose to match audio; the real filter is shorter than its table suggests."
+        - "Changing oversampling changes latency, so alignment must be re run."
+      avoid: "Replicating the truncated table; design our own half band (or reuse a clean FIR) and test passband flatness."
+      licence: "Own work; half band coefficients are generic but do not copy the table."
+      tag: rethink
+      we_call_it: wave_folder
+      src: ["crates/stock-devices/device-fold/src/lib.rs:1-130", "crates/dsp/src/resampler.rs:1-60"]
+  effects_dynamics_eq:
+    - id: limiter
+      theirs: Maximizer
+      kind: audio effect
+      purpose: "Brick wall limiter with automatic makeup so the output sits just under 0 dBFS."
+      params:
+        - "threshold = 0 dB, -24..0 dB lin; smoothed over 10 ms"
+        - "lookahead = true (setting)"
+      signal_flow: "Per sample peak of both channels goes into a sliding window maximum (window = lookahead plus one frames, monotonic queue), then a fast attack release follower (instant up, 200 ms release), then reduction in dB = min(0, threshold - envelope dB), smoothed by three cascaded moving averages that together span the lookahead window. Gain = reduction gain times a fixed makeup of minus (threshold) minus 0.001 dB. With lookahead the input is delayed by 5 ms and hard clamped to +-1 after gain; without it gain applies directly. Toggling lookahead crossfades over 15 ms."
+      chain_position: "last effect on master, or any channel"
+      automation_and_storage: "1 param + 1 setting. Reduction and input peak meters broadcast."
+      state: "5 ms delay ring, peak window, three moving averages, follower. Latency 240 frames at 48 kHz (5 ms) when lookahead is on, reported to the engine."
+      edge_cases:
+        - "Makeup is tied to threshold, so lowering the threshold raises output by the same amount: the limiter is also a loudness maximiser. The output ceiling is therefore fixed near 0 dB, not settable."
+        - "The final hard clamp can still distort on extreme overshoot; no true peak (no oversampling)."
+        - "Smoothing window sizes divide the lookahead by three: at high sample rates the ring is capped (960 frames, enough for 192 kHz)."
+        - "While the threshold is moving, makeup is recomputed per sample (costly), static otherwise."
+      avoid: "Coupling makeup to threshold without an explicit ceiling control; add a ceiling parameter."
+      licence: "Own work (the listing says it is not a ported plugin)."
+      tag: borrow
+      we_call_it: limiter
+      src: ["crates/stock-devices/device-maximizer/src/lib.rs:1-300", "packages/studio/forge-boxes/src/schema/devices/audio-effects/MaximizerDeviceBox.ts", "crates/dsp/src/simple_limiter.rs"]
+    - id: compressor
+      theirs: Compressor
+      kind: audio effect with optional sidechain
+      purpose: "Feed forward dynamics compressor, soft knee, crest factor based automatic attack and release, automatic makeup, optional 5 ms lookahead, parallel mix, external sidechain."
+      params:
+        - "input gain = 0 dB, -30..30 dB lin, glides 5 ms"
+        - "threshold = -10 dB, -60..0 dB lin"
+        - "ratio = 2, 1..24 exp; at 24 or above the device treats it as infinite (limiting)"
+        - "knee = 0 dB, 0..24 dB lin"
+        - "attack = 0 ms, 0..100 ms lin (the schema default differs from the device init of 2 ms; pushed values win)"
+        - "release = 25 ms, 5..1500 ms lin"
+        - "makeup = 0 dB, -40..40 dB lin"
+        - "mix = 1.0, 0..1 lin"
+        - "lookahead = false, automakeup = true, autoattack = false, autorelease = false, all bool parameters"
+        - "side chain = optional input"
+      signal_flow: "Gain staged input. Detection signal = max abs of the sidechain, or of the gained input. Level in dB through the static soft knee curve (zero below threshold minus half knee, quadratic inside the knee, linear slope 1/ratio - 1 above). A peak follower with separate attack and release coefficients smooths the reduction. Auto attack and release come from a block wise crest factor (peak over RMS) estimate that sets times inversely to crest. Auto makeup is the smoothed negative mean reduction. Lookahead path delays audio and runs the reduction through a ramp shaper so the dip arrives before the transient; the two paths are crossfaded over 15 ms when toggled. Output blends wet and dry by mix."
+      chain_position: "any audio effect slot, sidechain from another output"
+      automation_and_storage: "12 parameters, 1 sidechain pointer, three live meter values (input, reduction, output). Latency reported equals lookahead delay when on."
+      state: "follower, crest factor states, makeup smoother, 5 ms stereo delay and reduction ring, ramps."
+      edge_cases:
+        - "Reduction is applied from a follower on the dB value; attack and release roles are on the level after the compression curve, so release is about how fast reduction recovers."
+        - "dB conversions use a fast log2 and exp2 polynomial; the floor level for silence is minus 100 dB and the detector clamps the input level at 1e-6."
+        - "Auto attack and release are block wise (per 128 frame quantum or sub block) estimates; sub block length changes affect results unless the block size is fixed in our engine."
+        - "Mix is a parallel (dry plus wet) blend, not a power law."
+      licence: "PORTED from a third party open source compressor (CTAG DRC). openDAW README lists it under Ported Plugins excluded from the commercial licence. The upstream licence was not verified here (believed GPL-3.0). Treat as encumbered: do not port or transcribe. Build our own from the textbook feed forward design (static curve, one pole attack and release follower on level in dB, optional lookahead)."
+      avoid: "Porting the ported plugin; crest factor auto timing unless we design our own and listen; block size dependent estimates."
+      tag: rethink
+      we_call_it: compressor
+      src: ["crates/stock-devices/device-compressor/src/lib.rs:1-330", "crates/dsp/src/ctagdrc.rs:1-300", "README.md:138-143"]
+    - id: eq
+      theirs: Revamp
+      kind: audio effect
+      purpose: "Seven band parametric EQ with live spectrum display."
+      params:
+        - "bands in fixed signal order: high pass, low shelf, low bell, mid bell, high bell, high shelf, low pass"
+        - "each band: enabled (bool), frequency (exp 20..20000 Hz)"
+        - "high pass and low pass add order (1..4 cascaded sections, a setting like parameter) and q (exp 0.01..10, default 0.7071)"
+        - "shelves add gain (-24..24 dB, default 6)"
+        - "bells add gain (-24..24 dB, default 6) and q (default 0.7071)"
+        - "a deprecated global gain field (-18..18) remains in the schema"
+      signal_flow: "Per channel, the enabled bands run in series (each filters the previous output), each a biquad with its own history; high and low pass are stacks of up to four sections. No enabled band copies input to output. Coefficients are recomputed when any parameter of that band changes (no smoothing in this device)."
+      chain_position: "any audio effect slot"
+      automation_and_storage: "up to 24 parameters. The spectrum (512 bins, plus 64 fine bins for the low end from a decimated path) is written only while the UI watches."
+      state: "7 biquads per channel."
+      edge_cases:
+        - "No parameter smoothing: automated frequency sweeps step per update grid and can zipper; our control period and per sample coefficient interpolation is better."
+        - "Biquad Q of 0 would give NaN, a small floor is used for the pass types."
+        - "Order change resets the stack state (small click)."
+        - "Biquad cascade at high orders with identical Q compounds resonance; their modulated filter lowers Q by order^1.25 to counter."
+        - "Spectrum analyser: sum left and right, 1024 point Blackman window, radix 2 FFT, 512 magnitude bins with a max or decay envelope; decay is armed by the reader after each read."
+      avoid: "No smoothing; consumer armed decay coupling the DSP to UI cadence (the analyser must be a pure function of the audio and a fixed decay per frame)."
+      licence: "Own work, RBJ cookbook biquad formulas are public."
+      tag: borrow
+      we_call_it: eq
+      src: ["crates/stock-devices/device-revamp/src/lib.rs:1-300", "crates/dsp/src/biquad.rs:35-215", "crates/dsp/src/analyser.rs:1-60", "crates/dsp/src/low_band_analyser.rs:1-40", "packages/studio/forge-boxes/src/schema/devices/audio-effects/RevampDeviceBox.ts"]
+  effects_space_and_heavy:
+    - id: room_reverb
+      theirs: Reverb (Free Reverb)
+      kind: audio effect
+      purpose: "Classic Freeverb style reverb with pre delay."
+      params:
+        - "decay (room size) = 0.5, 0..1 lin"
+        - "pre delay = 1 ms, 1..500 ms exp, shown in seconds"
+        - "damp = 0.5, 0..1 lin"
+        - "filter = 0, -1..1 (bound but never applied, a dead parameter)"
+        - "wet = -3 dB, dry = 0 dB, db curve"
+      signal_flow: "Stereo pre delay ring, eight damped feedback combs in parallel per channel, four allpass in series per channel, right channel tuned slightly longer than left for width."
+      chain_position: "any audio effect, normally on a return bus"
+      state: "about 700 KB of fixed buffers sized for 48 kHz; tail rings. Cleared on stop."
+      edge_cases:
+        - "Comb tap lengths are not scaled by sample rate (44.1 kHz era tunings): at 96 kHz the room is half as long."
+        - "Dead filter parameter."
+      avoid: "Fixed tap lengths regardless of rate; the dead parameter."
+      licence: "Public domain algorithm and published tunings (Freeverb by Jezar). Our implementation is our own."
+      tag: borrow
+      we_call_it: room_reverb
+      src: ["crates/stock-devices/device-reverb/src/lib.rs:1-60", "crates/dsp/src/freeverb.rs:1-120"]
+    - id: plate_reverb
+      theirs: DattorroReverb
+      kind: audio effect
+      purpose: "Dense plate reverb (Dattorro topology)."
+      params:
+        - "pre delay = 0 ms, 0..1000 ms lin"
+        - "bandwidth = 0.9999, input diffusion 1 = 0.75, input diffusion 2 = 0.625, decay = 0.75, decay diffusion 1 = 0.7, decay diffusion 2 = 0.5, damping = 0.005, excursion rate = 0.5, excursion depth = 0.7 (all 0..1 lin)"
+        - "wet = -6 dB, dry = 0 dB"
+      signal_flow: "Mono sum, pre delay, input low pass, four input diffusion allpass, then a figure of eight tank with two modulated (excursion LFO, cubic interpolated) delay lines, damping low passes and decay diffusion allpass; stereo out from 14 taps."
+      chain_position: "any audio effect, normally on a return bus"
+      state: "12 delay rings packed in one block (about 500 KB), pre delay ring of 65536 frames."
+      edge_cases:
+        - "Tank delay lengths are in seconds at design and rounded at init; rings are sized for 48 kHz and clamped, so rates above 48 kHz shorten delays."
+        - "Their own profiling found this device the heaviest in whole projects."
+      licence: "Published algorithm (Dattorro, 1997). An MIT JS node is named as an inspiration. Our own implementation from the paper; do not copy tap constants from their file without checking the paper (they are in the paper)."
+      tag: borrow
+      we_call_it: plate_reverb
+      src: ["crates/stock-devices/device-dattorro-reverb/src/lib.rs:1-60", "crates/dsp/src/dattorro.rs:1-70"]
+    - id: impulse_reverb
+      theirs: Convolver
+      kind: audio effect
+      purpose: "Zero latency convolution with an impulse response sample (reverb, cabinets, rooms)."
+      params:
+        - "file = none, pointer to an audio asset"
+        - "wet = -3 dB, dry = 0 dB, db curve"
+        - "pre delay = 0, 0..0.5 s, power curve centered at 50 ms (reaches true zero)"
+        - "normalize = true (setting), reverse = false (setting)"
+      signal_flow: "Stereo input, stereo IR (mono IR copied to both). Non uniform partitioned convolution: a 128 tap direct FIR head (zero latency), then uniform partitions of 128 up to 8192 samples with FFT 256, then partitions of 8192 with FFT 16384 running once per 64 quanta, pipelined so big partitions never spike one quantum. IR is resampled to the engine rate, transformed over many quanta (a budget of a few partitions per block) so a swap does not stall."
+      chain_position: "any audio effect"
+      state: "IR spectra and input spectrum delay lines, worst case 12 to 16 MB per instance (8 s IR at 48 kHz limit, longer is truncated). Latency 0."
+      edge_cases:
+        - "IR load is distributed: the head is audible first and the tail fades in over tens of ms (not bit equal to a full load for the first moments)."
+        - "Needs SIMD for speed; they measured and decided partition layout by benchmark."
+        - "Reverse and normalize retransform the IR."
+      licence: "Own work (Gardner partition scheme is published). Our design: pick partition sizes by bench, keep deterministic summation order."
+      tag: borrow
+      we_call_it: impulse_reverb
+      src: ["crates/stock-devices/device-convolver/src/lib.rs:1-120", "crates/dsp/src/convolution.rs:1-80", "plans/convolution.md:1-60"]
+    - id: vocoder
+      theirs: Vocoder
+      kind: audio effect with optional sidechain
+      purpose: "Channel vocoder: modulator envelope imprinted on carrier bands."
+      params:
+        - "carrier min freq = 100 Hz, carrier max freq = 12000 Hz; modulator min = 100, max = 12000 (exp 20..20000)"
+        - "q start = 20, q end = 2 (exp 1..60): Q across the band range"
+        - "envelope attack = 5 ms (0.1..100 exp), envelope release = 30 ms (1..1000 exp)"
+        - "gain = 0 dB, -20..20 lin; mix = 1.0"
+        - "band count = 16 (setting; 8, 12 or 16); modulator source = pink noise (setting; white, pink, brown noise, self, or external sidechain)"
+      signal_flow: "Carrier is the main input. Up to 16 band pass filter pairs (carrier side and modulator side) with geometrically interpolated coefficients every sub block; modulator band envelope follower scales the carrier band; band count changes fade in."
+      chain_position: "audio effect on a channel; modulator via sidechain or built in noise"
+      state: "filters, envelopes, noise generator (seeded 32 bit, pink and brown filter state)."
+      edge_cases:
+        - "Noise generator is seeded and byte for byte reproducible, which is what we need."
+        - "Self as modulator turns it into a multiband gate."
+      licence: "Own work, textbook."
+      tag: borrow
+      we_call_it: vocoder
+      src: ["crates/stock-devices/device-vocoder/src/lib.rs:1-70", "crates/dsp/src/vocoder.rs:1-60", "packages/studio/forge-boxes/src/schema/devices/audio-effects/VocoderDeviceBox.ts"]
+    - id: pitch_corrector
+      theirs: Autotune
+      kind: audio effect, latent
+      purpose: "Monophonic real time pitch correction to a key and scale."
+      params:
+        - "key = C (0), 0..11"
+        - "scale = major (1), 0..7: chromatic, major, minor, major pentatonic, minor pentatonic, blues, dorian, mixolydian"
+        - "amount = 1.0 (square law taper), retune = 0.5 (speed and vibrato flatten), smooth = 0.6"
+        - "shift = 0 st, -12..+12 lin"
+        - "follow = false: use the project key at the block position instead of key and scale"
+      signal_flow: "Detect pitch with YIN on a 2:1 decimated mono sum (window 640, hop 128 at decimated rate, voiced when clarity under 0.15, floor 80 Hz, ceiling 1100 Hz, silence floor -55 dBFS), snap to nearest allowed note with 35 cent hysteresis and a 120 ms pitch centre, glide the correction by retune, then shift the audio with time domain pitch synchronous overlap add."
+      chain_position: "audio effect on a vocal channel"
+      state: "ring buffers, detector, PSOLA state. Reports latency."
+      edge_cases:
+        - "Decision logic runs in f64 with pinned tie breaks so the note sequence is reproducible; a golden fixture pins it."
+        - "Detection accuracy 98.6 percent within 50 cents against a neural reference on vocals; fails on polyphonic input."
+        - "Note: an earlier phase vocoder variant was removed; only PSOLA remains."
+      licence: "YIN (de Cheveigne, Kawahara) and TD-PSOLA are published methods; own implementation."
+      tag: borrow
+      we_call_it: pitch_corrector
+      src: ["crates/stock-devices/device-autotune/src/lib.rs:1-60", "crates/dsp/src/autotune.rs:1-40", "crates/dsp/src/psola.rs", "docs/autotune.md:1-70"]
+    - id: neural_amp
+      theirs: NeuralAmp (Tone3000 is the model service)
+      kind: audio effect, bridge
+      purpose: "Guitar amp and pedal models from captured neural models (WaveNet or LSTM NAM files)."
+      params:
+        - "model = pointer to a model box holding the model text (content addressed by hash)"
+        - "input gain = 0 dB, output gain = 0 dB (db curve -72..0..12)"
+        - "mono = true (setting)"
+        - "mix = 1.0 lin"
+      signal_flow: "Mono sum (or stereo) times input gain, run through the model inference module, times output gain, dry wet mix. Falls back to pass through while the module or model is not loaded."
+      chain_position: "audio effect on a guitar channel"
+      state: "model state inside a separate Emscripten C++ module with its own memory; 128 samples copied across per quantum."
+      edge_cases:
+        - "Separate wasm instance, cannot join the engine memory model; not deterministic across builds unless the model core is pinned."
+        - "Model files can be 80 MB per pack; they download only the first model and keep the rest on demand."
+        - "Tone3000 flow: a popup run select flow in the browser, then fetch of model URL with pre signed links; third party account and terms apply (service)."
+      licence: "Model core is a C++ library (believed MIT, unverified) vendored in an npm package. The Tone3000 service has its own API terms; check them before shipping a browser integration."
+      tag: rethink
+      we_call_it: neural_amp (device), amp_model (service)
+      src: ["crates/stock-devices/device-neural-amp/src/lib.rs:1-170", "plans/wasm-audio/neural-amp.md:1-60", "plans/done/tone-3000-api.md:1-70", "video/devices/tone3000.md"]
+    - id: band_split
+      theirs: FrequencySplit
+      kind: audio effect composite
+      purpose: "Split into up to four bands (three crossovers), each band with its own effect chain, summed back."
+      params:
+        - "crossover 1 = 200 Hz, crossover 2 = 1000 Hz, crossover 3 = 5000 Hz (exp 20..20000)"
+        - "dry = minus infinity dB, wet = 0 dB, per entry gain, pan, mute, solo"
+        - "band count (setting)"
+      signal_flow: "Linkwitz Riley crossovers with allpass phase compensation so untouched bands sum to a flat magnitude allpass."
+      chain_position: "audio effect slot hosting child chains"
+      edge_cases: "See framework.composites."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: band_split
+      src: ["crates/engine-env/src/composite_mix.rs:36-130", "packages/studio/forge-boxes/src/schema/devices/audio-effects/FrequencySplitBox.ts"]
+    - id: channel_split
+      theirs: StereoSplit (StereoComposite)
+      kind: audio effect composite
+      purpose: "Left and right channels through separate chains."
+      params: ["dry = minus infinity dB, wet = 0 dB; entry gain, pan, mute, solo"]
+      signal_flow: "Entry 0 reads left only, entry 1 reads right only. Untouched sum equals the input bit for bit."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: channel_split
+      src: ["crates/engine-env/src/composite_mix.rs:36-110", "packages/studio/forge-boxes/src/schema/devices/audio-effects/StereoCompositeBox.ts"]
+    - id: parallel_fx_rack
+      theirs: AudioEffectComposite (FX Composite)
+      kind: audio effect composite
+      purpose: "Several effect chains in parallel from the same input, each with gain, mute, solo, summed and blended with dry."
+      params: ["dry = minus infinity dB, wet = 0 dB; entry gain 0 dB, pan, mute, solo, label, minimized"]
+      signal_flow: "Input tap, broadcast to every entry chain, entry strip, wet sum, dry wet mix."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: parallel_fx_rack
+      src: ["crates/engine/src/effect_composite.rs:1-60", "packages/studio/forge-boxes/src/schema/devices/audio-effects/AudioEffectCompositeBox.ts"]
+  instruments:
+    - id: subtractive_synth
+      theirs: Vaporisateur
+      kind: instrument
+      purpose: "Two oscillator subtractive synth with filter, ADSR, LFO, unison, glide, mono or poly."
+      params:
+        - "volume = -6 dB (db curve), octave, tune (cents)"
+        - "oscillators: two, each waveform (sine, triangle, saw, square by index), octave -3..3, tune -1200..1200 cents, volume (db curve; default minus infinity for oscillator volume in the schema, factories set real values)"
+        - "filter: cutoff = 8000 Hz (20..20000 exp), resonance = 0.1 (0.01..10 exp as Q), filter order 1..4 (idx), envelope amount bipolar (the amp ADSR also drives cutoff), keyboard tracking bipolar"
+        - "amp ADSR: attack 5 ms, decay 1 ms (min), sustain 1.0, release 500 ms (times 1 ms..5 s exp)"
+        - "glide time 0..1 unipolar; voicing mode (mono or poly); unison count 1, 3, 5; unison detune 30 cents (1..1200 exp); unison stereo spread 1.0"
+        - "LFO: waveform, rate 0.0001..30 Hz exp, tempo sync flag, three bipolar targets (tune, cutoff, volume)"
+        - "a noise generator exists in the schema but is unused in DSP"
+      signal_flow: "Per voice: glide frequency buffer times unison detune, LFO optionally multiplies pitch, two band limited (PolyBLEP) oscillators mixed, a modulated multi section low pass (cutoff = base + keyboard + envelope times amount + LFO times target) with Q divided by order to the 1.25, times amp envelope times velocity gain, panned by unison spread (linear law). Whole mix goes to a brick wall limiter."
+      chain_position: "instrument slot, MIDI fx before, audio fx after"
+      automation_and_storage: "around 25 parameters; voices read the live parameters each quantum and the envelope at note on, so editing ADSR affects the next note."
+      state: "16 poly voices times unison 5, mono stack 16, shared scratch workspace; release tails."
+      edge_cases:
+        - "Filter coefficients are quantised in cutoff to a fixed number of exponential steps and recomputed only on step change (cheap, slightly steppy)."
+        - "Unison gain is energy normalised."
+        - "The cutoff is mixed in unit space so keyboard tracking, envelope and LFO all add before the exponential map."
+        - "Voice finishes when envelope is complete and VCA below a silence threshold of minus 80 dB."
+      avoid: "Unused noise params; the filter envelope sharing the amp ADSR (a real design would give the filter its own)."
+      licence: "Own work; PolyBLEP is public technique."
+      tag: borrow
+      we_call_it: subtractive_synth
+      src: ["crates/stock-devices/device-vaporisateur/src/lib.rs:1-110", "crates/stock-devices/device-vaporisateur/src/voice.rs:100-239", "crates/dsp/src/osc.rs:1-60", "crates/dsp/src/biquad.rs:370-430", "packages/studio/forge-boxes/src/schema/devices/instruments/VaporisateurDeviceBox.ts"]
+    - id: pd_synth
+      theirs: Neon
+      kind: instrument
+      purpose: "Phase distortion synthesizer in the style of a classic 1980s hardware synth (two lines, eight stage envelopes)."
+      params:
+        - "line select (4 modes: line 1, line 2, line 1 plus 1 prime, line 1 plus 2 prime), modulation (none, ring, noise)"
+        - "octave -3..3, detune -4800..4800 cents, tune -1200..1200 cents, glide time, voicing mode"
+        - "per line: wave 1 (8 shapes: saw, square, pulse, double sine, saw plus pulse, and three resonance waves), wave 2 (off or one of the shapes), key follow for DCW and DCA amounts 0..9"
+        - "six envelopes (pitch, DCW, DCA for each line), each 8 stages of rate 0..99 and level 0..99, a sustain step (0 for none) and an end step; vibrato (wave, delay, rate, depth 0..99)"
+      signal_flow: "A cosine read through a bent phase map. The distortion amount (DCW) moves a knee point of the map (not a crossfade); resonance waves are windowed sync. Level follows a measured dB curve. Two lines are combined plain, by ring multiplication or by scrambling line 2 pitch per cycle (noise mode)."
+      chain_position: "instrument slot"
+      state: "envelope stage state per voice, vibrato LFO, poly voice pool."
+      edge_cases:
+        - "Sustain off ends the note at the end step even while the key is held (hardware behaviour)."
+        - "All curves are calibrated by listening against a commercial plugin render; tables are approximations (marked)."
+        - "Envelope stage fields are plain observed fields, 108 fields."
+      avoid: "Copying calibration tables; calibrating against a commercial plugin and keeping its renders as fixtures (licence risk). Calibrate by ear or by public service manual numbers instead."
+      licence: "The idea (phase distortion) is old and public. The numeric tables are fitted to a commercial emulation, so do not copy them."
+      tag: rethink
+      we_call_it: pd_synth
+      src: ["crates/stock-devices/device-neon/src/lib.rs:1-60", "crates/stock-devices/device-neon/src/pd.rs:1-60", "crates/stock-devices/device-neon/src/envelope.rs:1-60", "crates/stock-devices/device-neon/src/voice.rs:1-60", "plans/neon.md:1-70"]
+    - id: single_sampler
+      theirs: Nano
+      kind: instrument
+      purpose: "Play one audio file across the keyboard, polyphonic, with region, loop, reverse and one shot."
+      params:
+        - "volume = -3 dB (db curve), octave -3..3, tune -1200..1200 cents, root key 60 (0..127)"
+        - "attack = 3 ms, release = 100 ms (both 1 ms upward, exp; release up to 8 s, attack up to 5 s), squared envelope"
+        - "sample start 0, sample end 1 (unit, start after end plays backward)"
+        - "loop = false, loop start 0, loop end 1, loop fade = 50 ms (1 ms..1 s exp)"
+        - "panning bipolar (smooth 5 ms), polyphone = true, one shot = false, fixed pitch = false"
+        - "file pointer to an audio asset"
+      signal_flow: "Per voice read head at rate 2^((pitch - root + cents/100)/12 + octave) times (sample rate / engine rate), linear interpolation, attack and release envelope squared, velocity times gain, loop with equal gain crossfade, summed and panned."
+      chain_position: "instrument slot"
+      state: "64 voices; read head f64; the loop shortens to fit region; mono retrigger and choke use a 5 ms fast release."
+      edge_cases:
+        - "Reverse starts at the last frame; an end clamp bug caught by tests killed reverse voices on the first frame."
+        - "One shot ignores note off, unless loop is on (a looping voice would never end)."
+        - "Loop crossfade length is clamped to half the loop span."
+        - "Sample not yet loaded: voices are dropped, new notes dropped."
+        - "Sample swapped mid note to a shorter one must not crash."
+        - "No anti aliasing on upward transposition (linear interpolation only)."
+      avoid: "Linear interpolation without band limit for large up shifts; consider cubic and a note about aliasing."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: single_sampler
+      src: ["crates/stock-devices/device-nano/src/lib.rs:1-260", "crates/stock-devices/device-nano/src/voice.rs:1-200", "plans/device-nano.md:1-60"]
+    - id: drum_sampler
+      theirs: Playfield
+      kind: instrument composite
+      purpose: "Sample drum machine: one pad per MIDI key, each pad a sample player with its own effect chains, choke groups and mute and solo."
+      params:
+        - "per pad: key index, file, label, icon, enabled, minimized"
+        - "per pad: polyphone, gate mode (off, on, loop), pitch cents, sample start and end, attack 1 ms, release 20 ms, volume dB, panning, mute, solo, exclude (choke group)"
+      signal_flow: "Notes are routed by key to the pad whose index matches; the pad plays like a single sampler with pad level strip; pads are summed into the device output."
+      chain_position: "instrument slot with child chains per pad"
+      edge_cases:
+        - "Exclude (choke) is computed at the base of the pull chain from the raw pitch while a pad filters after midi fx: a transpose effect before the drum machine changes which pad plays but not which pad chokes (an acknowledged inconsistency)."
+        - "Their plan retires the dedicated slot player and makes each pad a single sampler cell with a note filter in front; pad receives only its own key and plays it as its configured key."
+        - "First pad wins on a shared key."
+        - "Pad voice cap 16, steal oldest."
+        - "Finished voices must return before writing their sample (load bearing on a mono retrigger with gate off)."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: drum_sampler
+      src: ["crates/stock-devices/device-playfield-sample/src/lib.rs:1-110", "crates/stock-devices/device-playfield-sample/src/voice.rs:1-60", "plans/playfield-nano.md:1-60", "packages/studio/forge-boxes/src/schema/devices/instruments/PlayfieldDeviceBox.ts"]
+    - id: layer_rack
+      theirs: InstrumentComposite
+      kind: instrument composite
+      purpose: "N full instrument chains (MIDI fx, instrument, audio fx, strip) fed by the same notes and summed."
+      params: ["per layer: gain dB, mute, solo, pan, index, minimized"]
+      decisions_in_plan: "Mute gates at the strip (layer keeps running). Infinite nesting. No key or velocity split in the device: splitting is done by note filter MIDI effects placed in a layer chain. Macros are out of scope."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: layer_rack
+      src: ["plans/instrument-composite.md:1-80", "packages/studio/forge-boxes/src/schema/devices/instruments/InstrumentCompositeBox.ts"]
+    - id: soundfont_player
+      theirs: Soundfont
+      kind: instrument
+      purpose: "Play a SoundFont preset."
+      params: ["file pointer, preset index 0..65535; no automatable params"]
+      signal_flow: "The host parses the file on the main thread and hands the device a simplified blob (sample table, region table, preset table, normalised f32 PCM, generators resolved). The device matches key and velocity to regions and layers all matches."
+      edge_cases: "No parameter automation; parse failures are the host's job."
+      licence: "Own work; SF2 spec is public. We already have composer-sampler with SF2 (D34)."
+      tag: borrow
+      we_call_it: soundfont_player
+      note: "Already exists in our engine. Compare only: simplified blob handed to the audio side, so the audio path never parses untrusted files."
+      src: ["crates/stock-devices/device-soundfont/src/lib.rs:1-60", "crates/stock-devices/device-soundfont/src/blob.rs"]
+    - id: audio_player
+      theirs: Tape
+      kind: instrument (engine side)
+      purpose: "Plays audio regions and launched clips on audio tracks; the instrument for audio channels."
+      params: ["flutter 0.2, wow 0.05, noise 0.02, saturation 0.5 (unipolar) exist in the schema as defaults; no DSP found that uses them (unverified)"]
+      signal_flow: "Per quantum, per audio lane, find regions overlapping the block, read the source at native speed with a free running read head (no per block resync) that is reseated from the tempo map only at a discontinuity (region entry, loop wrap, seek), linear interpolation across rates, region gain times fade envelope, a short declick at unfaded edges, clip launch path with looping virtual region."
+      edge_cases:
+        - "Reseating only at discontinuities avoids audible jitter when tempo ramps."
+        - "Boundary declick must not double the fade."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: audio_player
+      note: "We already play clips offline (D40 to D42). Browser playback of clips is a gap (D42 open point)."
+      src: ["crates/engine/src/audio_region_player.rs:1-30", "packages/studio/forge-boxes/src/schema/devices/instruments/TapeDeviceBox.ts", "packages/studio/adapters/src/factories/InstrumentFactories.ts:36-48"]
+    - id: acid_bass
+      theirs: Cubed
+      kind: instrument with built in step sequencer
+      purpose: "Monophonic TB-303 style acid bass, driven by its own pattern or by notes."
+      params:
+        - "tuning = 0, -1200..1200 cents; cutoff 0; resonance 1.0; env mod 1.0; decay 0.5; accent 1.0 (all unit); volume = -12 dB; waveform (saw or square)"
+        - "pattern index 0..15; 16 patterns of up to 64 steps, each step packs note, gate, slide, accent; length 1..64; a groove pointer"
+      signal_flow: "Pattern becomes ordinary note events: accent is velocity at or above 100 of 127, slide is a note overlapping the next, gate is a fixed fraction of a step (0.55). A merger resolves pattern and live notes into one stream for one voice (last note priority, overlap means slide). Voice is a diode ladder style filter model with two envelopes and an accent circuit."
+      edge_cases:
+        - "Accent threshold sits at the velocity round trip boundary: emit full velocity for accent, else MIDI quantisation loses it."
+        - "A slide chain must reuse one note id or it leaves phantom held notes."
+        - "A slide hold must exceed one step so the next note on lands before the off."
+        - "Known open sound mismatches versus its hardware reference remain."
+      avoid: "Calibrating 52 constants against a commercial plugin and shipping its tables; a transcription of an external project (ar-303) that is gated by sample for sample parity to that project."
+      licence: "The 303 circuit idea is public. The constants and wavetables are fitted to a commercial plugin render and come from an outside private project: do not copy."
+      tag: rethink
+      we_call_it: acid_bass
+      src: ["crates/stock-devices/device-cubed/src/lib.rs:1-25", "crates/stock-devices/device-cubed/src/pattern.rs:1-60", "crates/stock-devices/device-cubed/src/merger.rs:1-40", "plans/device-cubed.md:1-40", "packages/studio/forge-boxes/src/schema/devices/instruments/CubedDeviceBox.ts"]
+    - id: script_instrument
+      theirs: Apparat
+      kind: instrument bridge (user script)
+      purpose: "User written instrument in JavaScript."
+      params: ["code text, plus dynamic child boxes for parameters, samples, sidechains, records and buffers declared by the script"]
+      signal_flow: "The Rust side only marshals offsets and parameter changes; the user processor runs in JS in the worklet over shared memory, with hot swap and validation JS side."
+      edge_cases:
+        - "Breaks the zero JS in render rule: unbounded run time, not deterministic across engines, cannot run native or offline the same as in the browser."
+        - "A script error must not take down the audio thread (they trap and offer restart)."
+        - "Parameters are dynamic child nodes so automation works like fixed params, keyed by declaration index."
+      licence: "Own work. The idea can be reimplemented with a sandboxed wasm script."
+      tag: rethink
+      we_call_it: script_instrument
+      src: ["crates/stock-devices/device-apparat/src/lib.rs:1-60", "crates/engine/src/script_device.rs:1-60", "docs/script-editor.md:1-60"]
+    - id: midi_out
+      theirs: MIDIOutput
+      kind: instrument (engine side, no audio)
+      purpose: "Send notes, controller values and transport messages to an external MIDI device."
+      params: ["device id, label, channel 0..15, delay ms 0..500 (default 10), send transport messages (bool), controller list (number 0..127 plus 0..1 value)"]
+      signal_flow: "Unit notes are converted to raw MIDI messages with sample accurate timing, queued for the host thread to drain into the real port; clock at 24 per quarter, start, stop and song position when enabled."
+      edge_cases: "Total latency compensation shifts output. Browser MIDI output is permission gated."
+      licence: "Own work."
+      tag: borrow
+      we_call_it: midi_out
+      src: ["crates/engine/src/midi_output.rs:1-30", "packages/studio/forge-boxes/src/schema/devices/instruments/MIDIOutputBox.ts"]
+  midi_effects:
+    - id: arpeggiator
+      theirs: Arpeggio
+      kind: MIDI effect, stateful pull source
+      purpose: "Turn held or sequenced notes into a stream of notes on a rate grid, with 18 walks, step lanes, ratchets, hold, retrigger and chance."
+      params:
+        - "mode (18 walks, first three up, down, up down), octaves 1..5, rate (17 fractions 1/1..1/128), gate 0..2 of the rate, repeat 1..16, velocity magnet bipolar"
+        - "order (played or pitch), hold, retrigger (off, note, bar, beat), offset 0..15, seed 0..999999, follow chords"
+        - "seven step lanes of 64: kind (rest, tie, chord, normal), velocity 0..100 percent, gate 0..200 percent, transpose -12..12, octave -2..2, chance 0..100, ratchets 1..7; pattern length 1..64"
+      signal_flow: "Pool of covering notes (ordered by start then pitch, or by pitch), expanded by octaves, a walk picks an index for the grid step, the step lanes decide rest, tie, chord, ratchet and modify gate, velocity, transpose, chance. Emitted notes have fixed durations of rate times gate and ignore the release of their source note."
+      chain_position: "MIDI effect list, before the instrument"
+      automation_and_storage: "mode, octaves, rate, gate, repeat, velocity, order, hold, retrigger, offset, follow are parameters; seed, lanes, pattern length are plain fields (int arrays). Version field exists."
+      state: "32 source notes, 256 retained notes, 256 events per block, ratchet hits scheduled in later blocks use their own buffer. Absolute grid phase: steps land on index times rate of the song grid, so nothing restarts when a key goes down."
+      edge_cases:
+        - "A discontinuity (seek, loop wrap) releases every emitted note."
+        - "Note on before note off at an equal tick."
+        - "Walk and random other sum over all earlier steps, cached and recomputed after a jump back, so output never depends on playback history."
+        - "Stopped transport arpeggiates live notes on a free running grid."
+        - "Changing a note mid cycle re indexes the walk (step mod count)."
+        - "Pitches above 127 pass through in the legacy path; our rule drops them."
+      licence: "Own work. Their plan cites other products for ideas only (mode lists are common knowledge). Do not copy their walk names or lane layout; derive our own set."
+      tag: borrow
+      we_call_it: arpeggiator
+      src: ["crates/stock-devices/device-arpeggio/src/lib.rs:1-110", "plans/arpeggio-enhanced.md:1-140", "packages/studio/forge-boxes/src/schema/devices/midi-effects/ArpeggioDeviceBox.ts"]
+    - id: transpose
+      theirs: Pitch
+      kind: MIDI effect
+      purpose: "Shift pitch by octaves, semitones and cents."
+      params: ["semitones = 0, -36..36 int", "cents = 0, -50..50 lin", "octaves = 0, -7..7 int"]
+      signal_flow: "Note on pitch += octaves * 12 + semitones, cent += cents; note off replays the pitch of its own note on (table of 64 held notes). Out of range drops the note."
+      edge_cases: ["Table full: a note on goes out untracked and its off passes unshifted.", "Dropping is not clamping (clamping would fold two pitches onto one)."]
+      licence: "Own work."
+      tag: borrow
+      we_call_it: transpose
+      src: ["crates/stock-devices/device-pitch/src/lib.rs:1-130", "packages/studio/forge-boxes/src/schema/devices/midi-effects/PitchDeviceBox.ts"]
+    - id: velocity_shaper
+      theirs: Velocity
+      kind: MIDI effect
+      purpose: "Reshape note velocities: pull toward a target, add seeded randomness, offset, mix."
+      params: ["magnet position 0.5 and strength 0 (unipolar)", "random seed (0..65535, schema default 2048), random amount 0", "offset 0 bipolar", "mix 1.0"]
+      signal_flow: "wet = clamp(original + (target - original) * strength + (uniform random * 2 - 1) * amount + offset); out = original * (1 - mix) + wet * mix. Random is reseeded per note from seed plus note position, so output is deterministic and position locked."
+      licence: "Own work (mulberry32 is a public small PRNG)."
+      tag: borrow
+      we_call_it: velocity_shaper
+      src: ["crates/stock-devices/device-velocity/src/lib.rs:1-110", "packages/studio/forge-boxes/src/schema/devices/midi-effects/VelocityDeviceBox.ts"]
+    - id: note_filter
+      theirs: NoteFilter (extra, not in owner list)
+      kind: MIDI effect
+      purpose: "Pass notes in a pitch range; optionally transpose them or remap them to one key. Used by the drum machine to route one key to one pad."
+      params: ["min 0, max 127 (inclusive, min above max passes nothing)", "set = false (set on: every passing note plays as the key parameter)", "transpose 0 (+-127; result out of range is ignored)", "key 60"]
+      licence: "Own work."
+      tag: borrow
+      we_call_it: note_filter
+      src: ["crates/stock-devices/device-note-filter/src/lib.rs:1-60", "plans/playfield-nano.md:30-60"]
+    - id: scale_snap
+      theirs: ScaleMatrix (extra)
+      kind: MIDI effect
+      purpose: "Quantise notes to a scale, own or project key, with a custom per pitch class offset table."
+      params: ["root 0..11", "scale (16 entries incl. custom)", "follow project key", "custom offsets per pitch class -6..12 (mute marker drops the note)"]
+      edge_cases: ["Two notes quantised to the same pitch share it: only the first on and the last off go out."]
+      licence: "Own work."
+      tag: borrow
+      we_call_it: scale_snap
+      src: ["crates/stock-devices/device-scale-matrix/src/lib.rs:1-60"]
+    - id: groove_warp
+      theirs: Zeitgeist
+      kind: MIDI effect
+      purpose: "Warp note positions by a groove template (swing and feel)."
+      params: ["groove pointer (none passes through)"]
+      signal_flow: "Pull upstream over the unwarped range then map positions through the groove, clamp back into the block."
+      licence: "Own work."
+      tag: rethink
+      we_call_it: groove_warp
+      note: "Grooves live in a registry shared with regions (region level grooves). Needs a model concept (groove template) before a device. Wave E."
+      src: ["crates/stock-devices/device-zeitgeist/src/lib.rs:1-60", "plans/zeitgeist-grooves.md", "plans/region-grooves.md"]
+    - id: script_midi_fx
+      theirs: Spielwerk
+      kind: MIDI effect bridge (user script)
+      purpose: "User written MIDI effect in JavaScript."
+      signal_flow: "Same bridge as the script instrument and script fx."
+      edge_cases: "Same hazards as script_instrument."
+      tag: rethink
+      we_call_it: script_midi_fx
+      src: ["crates/stock-devices/device-spielwerk/src/lib.rs:1-40", "crates/engine/src/script_device.rs"]
+  scripting_and_hosting:
+    - id: script_fx
+      theirs: Werkstatt
+      kind: audio effect bridge (user script)
+      purpose: "User written audio effect: the script declares parameters, samples and sidechains in comments or directives and a process function runs per block."
+      params: ["code text; dynamic children: parameters (label, index, value, default), samples (label, index, file), sidechains (label, index, source)"]
+      signal_flow: "Per block the Rust side gives the input and output buffer offsets to the JS bridge, which runs the user processor over shared memory."
+      edge_cases:
+        - "Latency is declared by the script (directive or property)."
+        - "User scripts cannot be trusted to terminate, so a time budget and a kill are needed."
+        - "Same script on native render is a second runtime."
+      avoid: "Arbitrary JS in the audio path."
+      licence: "Own work. Idea only."
+      tag: rethink
+      we_call_it: script_fx
+      src: ["crates/stock-devices/device-werkstatt/src/lib.rs:1-60", "crates/engine/src/script_device.rs:1-80", "packages/studio/forge-boxes/src/schema/devices/audio-effects/WerkstattDeviceBox.ts"]
+    - id: web_plugin_host
+      theirs: WCLAP device, WCLAP instrument, WCLAP MIDI effect
+      kind: instrument, audio effect and MIDI effect bridges
+      purpose: "Host CLAP plugins compiled to wasm as instruments, audio effects or MIDI effects, with their parameters automatable and their state travelling with the project."
+      params: ["url (content hash of the bundle), clap id, plugin state bytes (field 14, replaces a base64 string field 12), dynamic parameter children (clap id, value, default, min, max, flags, module), samples"]
+      signal_flow: "A thin device module calls a JS bridge that runs the plugin instance; engine pushes parameter changes and events."
+      edge_cases:
+        - "Bundle is pinned by content hash; project load resolves missing bundles from a catalogue or asks the user; update changes only url and clap id and keeps the state blob."
+        - "State as base64 string cost a third more and a decode every apply; moved to a bytes field with a migration."
+        - "Plugin latency is reported through the CLAP latency extension."
+      licence: "CLAP is MIT. Individual plugins have their own licences; a catalogue needs per plugin licence data."
+      tag: borrow
+      we_call_it: web_plugin_host
+      see: notes/ref-webclap.yaml (loader, memory, threading, risks)
+      src: ["crates/stock-devices/device-wclap/src/lib.rs:1-60", "plans/wclap-state-bytes.md:1-40", "plans/wclap-versioning.md:1-30", "packages/studio/forge-boxes/src/schema/devices/audio-effects/WclapDeviceBox.ts"]
+  extras_found:
+    - id: korpus
+      note: "Physical modelling instrument (modal resonator bank with five material laws, plucked string). Not in owner list."
+      src: crates/stock-devices/device-korpus/src/lib.rs:1-50
+    - id: tubular
+      note: "Six operator FM synth derived from a Google Apache-2.0 engine and Dexed GPL-3.0 host and output code. GPL: stays out."
+      src: ["crates/stock-devices/device-tubular/src/lib.rs:1-5", "crates/stock-devices/device-tubular/src/fx.rs:1"]
+    - id: mastering
+      note: "Reference matching mastering, GPL-3.0 (Matchering), studio only. Stays out."
+      src: ["crates/matchering/Cargo.toml:6", "README.md:138-143"]
+
+what_to_avoid_summary:
+  - "Replicating bugs for float parity with an older engine (truncated half band table, delay return limiter time unit)."
+  - "Dead parameters in the schema (room reverb filter, tape character, synth noise)."
+  - "Parameter ranges that live in two places and disagree (gate floor)."
+  - "Automation stored as unit values (range changes need migrations)."
+  - "Reverb and delay rings sized for 48 kHz only."
+  - "Bypass without clearing state."
+  - "UI cadence coupling inside DSP (analyser decay armed by the reader)."
+  - "Scripts in the audio thread."
+  - "Calibration against commercial plugin renders and copying fitted tables."
+  - "Porting the compressor from its third party source."
+
+licence_summary:
+  openDAW: "AGPL-3.0-or-later or commercial licence by agreement. Copying code into a closed product is not allowed. Ideas are free."
+  excluded_in_commercial_licence_by_their_own_list: ["Compressor (ported)", "Mastering (GPL-3.0)"]
+  gpl_inside_repo: ["Tubular (Dexed host and output code, GPL-3.0)", "Matchering (GPL-3.0-or-later)"]
+  permissive_inside_repo: ["time stretch library Signalsmith (MIT, licences/signalsmith-stretch-MIT.txt)", "CLAP (MIT)"]
+  needs_review: ["upstream licence of the compressor source", "licence of the neural amp C++ core and of the model files from the third party service", "Tone3000 service terms for browser integrations"]
+
+unverified:
+  - "Tape character DSP (flutter, wow, noise, saturation): fields exist, no DSP found. May live in an unread file or be reserved."
+  - "Subtractive synth per oscillator volume defaults: schema default is minus infinity, factories probably set values; not checked."
+  - "Compressor upstream licence (README implies copyleft, not read at source)."
+  - "Neural amp core licence (believed MIT)."
+  - "Delay return limiter: coefficients use 50 and 250 as seconds in the exponent, which makes it near inert; not confirmed against the older TS version or by a listening test."
+  - "Whether Freeverb and plate reverb at rates above 48 kHz sound wrong; deduced from fixed sizes only."
+  - "Whether the lookahead toggle crossfade in limiter and compressor hides all latency discontinuities when alignment inserts a compensation delay."

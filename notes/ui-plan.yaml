@@ -1,0 +1,917 @@
+# UI product plan for the composer web app (R03). Executable by parallel agents.
+# Status: proposed. Gap entries become D20 to D31 in notes/decisions.yaml before any core change.
+# This plan also serves as the T15 beginner flow design for the owner to react to.
+meta:
+  id: R03
+  date: 2026-11-23
+  author_lane: ui
+  inputs:
+    - CLAUDE.md
+    - notes/handoff.yaml
+    - notes/decisions.yaml (D9 to D19)
+    - notes/tasks.yaml (T20, T21, T21a, T22, T23 queued by another session)
+    - notes/ui-audit.yaml (F01 to F40, top_15_by_value_per_effort)
+    - web/app/README.yaml and web/app/src
+    - core/composer-commands/src/describe.rs (26 commands)
+    - mcp/composer-mcp/src/tools.rs (26 command tools plus fixed tools)
+    - notes/ref-opendaw-ui.yaml (R01, 25 lessons, folded in; see r01_folded_in)
+  not_read: "No reference DAW UI code was read by this author; R01 facts come only from notes/ref-opendaw-ui.yaml."
+  validity_rule: "Every U task lists needs (U ids only) and external_needs (T ids from notes/tasks.yaml). No other ids are referenced."
+
+product_intent:
+  summary: "A beginner first composer: get an idea out of your head onto the screen without confusion. Recreate a film or OST piece by ear, make cinematic music, make one hour of calm music for videos."
+  owner_dislikes: [complex DAW chrome (Logic Pro, Cubase), stock sounding instruments]
+  owner_likes: [Splice style sounds, fast smooth UI that scales, full AI control through the same command API]
+  hard_constraint: "The UI never contains an edit that is not a command. CLI and MCP can do everything the UI can."
+
+existing_code_to_reuse:
+  - path: web/app/src/state/store.ts
+    use: "Store, the single client of Backend; keep it, add the change feed mirror in U22"
+  - path: web/app/src/state/commands.ts
+    use: "pure command builders; every new gesture adds a builder here with a unit test"
+  - path: web/app/src/state/actions.ts
+    use: "Actions class; templates, clipboard and record land here as methods that emit one group"
+  - path: web/app/src/backend/types.ts
+    use: "Backend interface; transport, history, proposals and library methods are added here once, implemented by WasmBackend and DaemonBackend"
+  - path: web/app/src/roll/RollController.ts
+    use: "canvas input for the roll; drag commits one group on pointer up (keep this pattern everywhere)"
+  - path: web/app/src/roll/ArrangementController.ts
+    use: "arrangement canvas; region gestures extend it (T20 adds move and resize)"
+  - path: web/app/src/roll/geometry.ts
+    use: "hit testing and coordinate math; all new hit tests go here so vitest covers them"
+  - path: web/app/src/ui/canvasHost.ts
+    use: "dirty flag rAF loop; U27 splits it into layers, the API stays"
+  - path: web/app/src/ui/palette.tsx
+    use: "token probes so canvases share Tailwind tokens"
+  - path: web/app/src/config.ts
+    use: "every threshold from VITE_* env; all new numbers in this plan go here"
+  - path: web/app/src/debug.ts
+    use: "window.composerDebug; e2e scripts read it (U02 adds firstSoundMs, commandLog)"
+  - path: web/app/src/index.css
+    use: "Tailwind v4 @theme tokens with light-dark(); U01 extends, does not replace"
+  - path: web/app/src/icons/index.tsx
+    use: "@thesvg/ui-react plus local glyphs; new icons are added here only"
+  - path: web/app/src/input/liveInput.ts
+    use: "computer keyboard and Web MIDI; U14 records from it"
+  - path: web/app/src/audio/offline.ts
+    use: "offline WAV render; U29 moves it into a worker with progress"
+  - path: sounds/catalogue.yaml
+    use: "sound list for the picker (T21, U07)"
+
+principles:
+  - id: P1
+    rule: "Every screen has one obvious next action, shown as the only filled button or the next action chip."
+    test: "agent-browser snapshot of each screen state has exactly one element with data-primary=true"
+  - id: P2
+    rule: "Every edit is a command or a group of commands. Gestures preview locally and commit one group on release, so one gesture is one undo step."
+    exempt: "view state (zoom, scroll, panel open), audition of a sound and live note playing; they change nothing saved"
+    test: "e2e: every gesture script ends with undoDepth plus 1 and one undo restores the prior state_hash"
+  - id: P3
+    rule: "Sound within 10 seconds of opening the app, with at most 2 actions."
+    test: "composerDebug.firstSoundMs under VITE_E2E_FIRST_SOUND_MS (default 10000) and actionsToFirstSound at most 2"
+  - id: P4
+    rule: "Plain words first: labels say what happens (Grid: eighth notes, Save to file, Loop this clip), jargon only in disclosed detail."
+    test: "a lint list of banned visible labels (quantize, region, velocity, MIDI CC) checked in vitest against rendered chrome text; disclosed panels allowed"
+  - id: P5
+    rule: "Nothing is hidden behind a mode or a gesture. One smart pointer, no tool palette, and every gesture also has a visible button or menu item and a key (R01 lesson 16)."
+    test: "no tool state in Store; vitest checks every gesture id in keymap.ts has a menu or button entry"
+  - id: P6
+    rule: "Big projects feel like small ones: a frame draws within VITE_FRAME_BUDGET_MS and an edit shows within VITE_INPUT_BUDGET_MS at the bench default size."
+    test: "U27 stress e2e reads composerDebug draw stats at 300 tracks"
+  - id: P7
+    rule: "Everything is reachable by keyboard and every committed command is announced in plain words in a live region."
+    test: "e2e keyboard only script completes hero flow F2; aria-live text matches the command label"
+  - id: P8
+    rule: "AI changes are visible before they land and are one undo step after."
+    test: "proposal preview leaves state_hash unchanged; apply adds exactly one history entry with source ai"
+
+personas:
+  - id: mira
+    who: "Beginner composer, 20s, laptop with headphones, Chrome. Hears film cues in her head, cannot read notation, tried Logic and gave up."
+    goal: "Recreate the main motif of a film theme and then make her own cue in that style."
+    fear: "Too many panels, sounds that sound like a toy."
+  - id: dev
+    who: "Video creator, no music theory, needs one hour of calm background music each week."
+    goal: "Pick a mood, get a long calm track, export a WAV, done in 5 minutes."
+    fear: "Learning anything, loops that sound obviously repeated."
+  - id: agent
+    who: "An AI agent (CLI or MCP) acting for Mira or Dev."
+    goal: "Read the project, propose edits, have them shown and applied with undo."
+    need: "Same commands and reads as the UI, compact summaries, proposals instead of silent edits."
+
+hero_flows:
+  - id: F1
+    name: Recreate a piece by ear
+    persona: mira
+    steps:
+      - "Start screen, choose 'Recreate a piece' (audio starts on this click, a soft piano and a click track play)"
+      - "Tap tempo button 8 times along the reference playing in another tab; tempo is set (set_tempo)"
+      - "Pick the key from the Key picker, or leave 'Not sure' (shows all rows)"
+      - "Loop is on over bars 1 to 4 by default; press Record, count in 1 bar"
+      - "Play the motif on the computer keyboard; on stop the notes land in the clip (one group)"
+      - "Fix wrong notes by dragging; out of key rows are shaded"
+      - "Copy bars 1 to 4 and paste at bar 5 (Ctrl C, click ruler at bar 5, Ctrl V)"
+    target_actions_to_first_sound: 1
+    target_seconds_to_first_sound: 5
+    target_actions_to_first_4_bar_phrase: 15
+    reference_audio_track: "covered by T23 (audio import) plus T22; until then the reference plays outside the app"
+  - id: F2
+    name: Make a cinematic cue
+    persona: mira
+    steps:
+      - "Start screen, choose 'Cinematic idea' (template with strings pad, low piano, pulse, boom; plays at once, loop on)"
+      - "Next action chip says 'Change the chords'; click a chord in the chord strip to replace bar 1"
+      - "Open Sound tab, preview Strings, pick 'Warm strings' for track 1"
+      - "Open Mix tab, lower the pulse, mute the boom"
+      - "Repeat the 4 bar block 4 times (Repeat x N)"
+      - "Export, WAV"
+    target_actions_to_first_sound: 1
+    target_seconds_to_first_sound: 8
+    target_actions_to_export: 12
+  - id: F3
+    name: One hour of calm music
+    persona: dev
+    steps:
+      - "Start screen, choose 'Calm hour' (plays at once)"
+      - "Pick a mood (Warm, Night, Rain) and a key, or keep the default"
+      - "Pick length 60 minutes; the recipe extends the piece with looping clips and sections (one undo step)"
+      - "Preview by clicking sections on the ruler"
+      - "Export WAV, progress with time left and cancel"
+    target_actions_to_first_sound: 1
+    target_seconds_to_first_sound: 8
+    target_actions_to_export_start: 5
+    render_budget: "60 minutes renders under COMPOSER_BENCH_MAX_RENDER_RTF times real time in the browser worker"
+
+information_architecture:
+  decision: "One workspace screen. Panels are a bottom dock with tabs, never floating windows. AI assist lives in the command palette, not in a side rail. Goal cards open as a non modal sheet over the workspace on first open."
+  reason: "Beginners lose floating windows; one fixed layout makes screenshots, help text and agent-browser scripts stable, and the canvas area stays large."
+  routes:
+    - "#/start (goal sheet and project library, also reachable from the project name menu)"
+    - "#/p/<project id> (workspace)"
+  screens:
+    - id: start
+      purpose: "Pick a starting point and hear it at once, or reopen a project"
+      first_open: "the workspace with the starter project sits behind a non modal sheet; primary button 'Play the starter' (audit good_to_keep instant start), goal cards secondary; Not now and Never show (R01 lessons 1, 25); returning users land on their last project"
+      default_visible: [Play the starter (primary), three goal cards (Recreate a piece, Cinematic idea, Calm hour), Blank project link, recent projects (6)]
+      disclosed: [all projects list with search, Open file (project or MIDI), connect to composerd]
+      primary: the card under the pointer or first card when focused
+      covered_by: "T22 executes this spec (U04)"
+    - id: workspace_top_bar
+      default_visible: [project name, Play, Stop, Record, Loop, Metronome, tempo, Key, position bars and beats, Undo, Redo, Export, help]
+      disclosed: [time signature select, tap tempo, count in length, theme and density in settings, MIDI device]
+    - id: arrangement
+      purpose: "Clips on track lanes over time; the map of the song"
+      default_visible: [track headers with name, sound, mute and solo, clip blocks with mini notes, ruler with loop brace and markers, playhead]
+      disclosed: [track volume and pan (in Mix tab), track reorder handle on hover, section lane when markers exist]
+    - id: dock_notes
+      tab: Notes
+      purpose: "Piano roll of the selected clip"
+      default_visible: [keyboard with note names on C rows, key shading, grid select, chord strip collapsed to one row, vertical and horizontal scrollbars]
+      disclosed: [velocity lane (thin strip, grows when notes are selected or on hover), quantize strength, triplet grids, note list view for screen readers]
+    - id: dock_sound
+      tab: Sound
+      purpose: "Sound browser for the selected track"
+      default_visible: [categories, search, sound cards with preview on press, licence line]
+      disclosed: [all catalogue details, attribution text]
+      covered_by: "T21 executes this spec (U07); samples from T21a"
+    - id: dock_mix
+      tab: Mix
+      purpose: "Mixer strips"
+      default_visible: [per track volume fader, mute, solo, meter, master fader]
+      disclosed: [pan, reverb send, numeric dB readout]
+    - id: export_sheet
+      purpose: "Get the music out"
+      default_visible: [WAV button, length choice (whole song, loop, section), progress with cancel]
+      disclosed: [sample rate, MIDI export, attribution file]
+    - id: command_palette
+      purpose: "Ctrl K or the Ask button: one palette with verbs (Add, Change, Remove, Go to, Suggest) generated from describe() metadata (D33), word start matching, usage ranking; its Suggest section is the AI assist panel"
+      default_visible: [Ask button in the top bar with a badge when an agent proposal waits]
+      disclosed: [suggestion cards with Preview, Apply, Undo, raw commands of a card, proposal source]
+    - id: history_panel
+      purpose: "Undo history as plain steps, click to jump"
+      default_visible: [none; opens from Undo long press or Ctrl Alt Z]
+    - id: help_overlay
+      purpose: "One screen of gestures and keys (Shift plus /)"
+  layout:
+    desktop: "top bar 48 px; arrangement and dock as a resizable split (default 40 and 60, remembered locally); arrangement never below VITE_MIN_ARRANGEMENT_ROWS lanes (R01 lesson 17); footer 28 px with autosave time, sample rate, latency and storage use with a warning threshold (R01 lesson 13)"
+    narrow: "under 900 px the track header shrinks to icons; under 640 px the dock is full height and the arrangement becomes a tab"
+  empty_states: "every empty area shows its next two actions as buttons plus a drop hint (empty project: Add a sound, Import MIDI; empty clip: Record, Draw a note) (R01 lesson 3)"
+  add_track_rule: "adding a track creates a 4 bar empty clip (audit good_to_keep) and opens it in the Notes tab so there is no 'now what' moment (R01 lesson 2)"
+  next_action_chip:
+    rule: "A small chip under the top bar shows one suggestion from a fixed rule list (empty clip: draw or record; one clip: repeat it; no sound chosen: pick a sound; long project, nothing exported: export). It hides after 3 dismissals."
+
+interaction_specs:
+  region_move:
+    - "Press on a clip body selects it; travel over config.dragThreshold starts a drag with a ghost; nothing is sent until release"
+    - "Snap to bars when a bar is wider than VITE_SNAP_BAR_MIN_PX, else to beats; Shift held disables snap"
+    - "Vertical travel moves between lanes; dropping below the last lane creates a track (group of add_track, move_region_to_track, move_region)"
+    - "Alt held at release copies instead (duplicate_region with new ids)"
+    - "Esc during drag cancels; release commits one group labelled 'Move clip' or 'Copy clip' (R01 lesson 9)"
+    - "The cursor names the clip part under it (body moves, edge resizes); dropping onto another clip keeps the overlap (allowed by D9) and shows a toast with Undo (R01 lessons 8, 23)"
+    - "Every drag has a visible equivalent: clip menu with Move to track, Copy, Split, Repeat (P5)"
+  region_resize:
+    - "Right edge zone of VITE_REGION_EDGE_PX resizes length (resize_region); notes past the new end are kept but shown faded only if the core allows, else the drag stops at the last note end"
+    - "Left edge trim is a group of move_region plus move_notes by the opposite delta (needs D22); until then left edge does nothing and shows no resize cursor"
+  region_split:
+    - "S splits selected clips at the playhead; Alt click on a clip splits at the pointer (split_region with caller ids)"
+  region_duplicate_and_repeat:
+    - "Ctrl D duplicates the selection right after itself; Repeat x N (Ctrl Shift D) asks for N (1 to VITE_MAX_REPEAT) and emits one group of duplicate_region"
+  region_loop:
+    - "Loop this clip (L with a clip selected) sets the transport loop to the clip; a clip loop field (D24) lets one clip repeat its content over a longer length for the calm hour flow"
+  keyboard_region_access:
+    - "Arrangement canvas is focusable; arrows move between clips and lanes, Enter opens the clip in Notes, N adds a 4 bar clip at the cursor, Delete removes, the live region announces 'Pad, bars 5 to 8'"
+  roll_select:
+    - "Click selects one note, Shift click adds, drag on empty grid with Shift draws a marquee, Ctrl A selects all notes in the clip"
+    - "Drag on empty grid without Shift draws a note (kept from M1, audit good_to_keep); double click on empty grid places a note with the last used length and loudness, double click on a note removes it (R01 lesson 6)"
+    - "Drag a selected note moves all selected notes (move_notes, D22)"
+    - "Alt drag copies selected notes (add_notes with new ids)"
+  roll_quantize:
+    - "Q quantizes selected notes, or all notes when none are selected, to the current grid at 100 percent; strength is disclosed in the grid menu (quantize_notes)"
+    - "Grid menu: Auto (default, follows zoom with a minimum cell of VITE_GRID_MIN_CELL_PX, label names the current value, for example 'Grid: auto, eighth notes'), Off, quarter, eighth, sixteenth, triplets under More"
+  scale_and_chord_helpers:
+    - "Key picker in the top bar sets the project key (set_key, D23); default 'Not sure' shades nothing"
+    - "Out of key rows are shaded with --color-roll-outkey; 'Stay in key' toggle snaps drawn and dragged pitches to the nearest in key pitch; clips follow the project key; a Fit to key button moves stray notes into the key (conform_notes_to_scale) (R01 lesson 7)"
+    - "Chord strip shows the 7 chords of the key as plain names (C, Dm, Em, F, G, Am, Bdim) with roman numerals disclosed; click inserts the chord at the playhead for one grid length or replaces the notes of the selected bar (add_notes, delete_notes in one group)"
+  velocity:
+    - "Velocity lane shows bars for notes; drag on a bar sets that note; with a selection, drag anywhere sets all selected to the pointer value; Alt drag draws a ramp (set_notes_velocity, D22)"
+    - "Values show as Soft, Medium, Loud labels with the number disclosed on hover"
+  transport:
+    - "Space toggles play only when focus is on body, a canvas or the transport group (fixes F29)"
+    - "Play starts at the playhead; Stop once stops in place, Stop twice returns to the last start point"
+    - "Click on the ruler seeks and keeps playing state; drag on the ruler draws the loop brace; L toggles loop"
+    - "Metronome (M when focus is a canvas) clicks on beats with an accent on bar 1; count in length 0, 1 or 2 bars (default 1 from VITE_COUNT_IN_BARS) applies to Record and optionally to Play"
+    - "All of this is session state set through transport.set (D21) so the agent sees and sets it too"
+  record:
+    - "Record arms the selected clip (creates one at the playhead if none); count in, then live notes from the computer keyboard or MIDI are captured with timing from the audio clock"
+    - "On stop, captured notes are optionally quantized to the grid (toggle, default on at eighths) and committed as one add_notes group 'Record 12 notes'"
+    - "With loop on, each pass adds notes (overdub); undo removes the last pass only"
+  zoom_and_fit:
+    - "Ctrl plus or minus and Ctrl wheel zoom around the pointer; pinch on trackpad zooms; Shift wheel scrolls horizontally"
+    - "F fits the selection, Shift F fits the whole song, Home goes to the start (both arrangement and roll)"
+    - "Zoom levels are view state, saved locally per project, not commands"
+  copy_paste:
+    - "Ctrl C copies selected notes or clips into a client clipboard of snapshots (relative ticks, pitches, velocities, source track)"
+    - "Ctrl V pastes at the playhead snapped to the bar, into the selected clip for notes (add_notes with new ids, creating or growing the clip with resize_region if needed) or onto the source track for clips (duplicate_region)"
+    - "Ctrl X is copy then delete in one group; paste across bars keeps beat offsets within the bar"
+  sound_audition:
+    - "Pressing a sound card opens a trial (group.begin, D32) and applies set_instrument live so playback uses it; each next pick replaces it inside the same trial; OK commits one undo step, Escape rolls back (R01 lesson 4). Agents use the same trial methods to try and revert"
+  undo_history:
+    - "Undo and Redo show the step label in the tooltip and in a toast ('Undone: Move 4 notes', with Redo)"
+    - "History panel lists steps from history.get (D20) with source (you, AI, template), current position marked; click a step undoes or redoes to it in one call"
+    - "Deleting a track shows a toast with Undo (fixes F06)"
+
+visual_design:
+  direction: "Calm studio paper by day, deep ink by night. Warm neutrals, one teal accent for action, muted instrument family hues for clips. Distinctive through clip shapes and color families, not through effects."
+  avoid: [gradients on chrome, glass blur, rounded 2xl cards everywhere, emoji, rainbow text, symmetric feature grids]
+  color:
+    keep: "existing light-dark() tokens in web/app/src/index.css (surface, panel, line, ink, accent, roll-*)"
+    add:
+      - "--color-family-keys, -strings, -pads, -bass, -plucks, -choir, -bells, -perc: 8 muted hues at equal lightness (OKLCH L 0.62 light, 0.72 dark, chroma 0.08) for clip fill and track header stripe"
+      - "--color-roll-outkey: row shade for out of key pitches, contrast 1.15 against roll-row"
+      - "--color-loop: loop brace and loop region tint, amber at low chroma"
+      - "--color-ghost: preview of drags and AI proposals, accent at 35 percent alpha with dashed outline"
+      - "--color-record: record button and capture tint"
+    contrast: "text 4.5 to 1, notes and clips against their background 3 to 1, both themes, checked by a vitest that reads the token pairs"
+  theme: "system default, toggle in settings (system, light, dark) sets data-theme on html; color-scheme follows"
+  type:
+    family: "keep the system sans stack: zero bytes, crisp at small sizes, native feel; numbers use tabular-nums and the mono stack for positions"
+    scale_px: [12, 13, 14, 16, 20, 28]
+    usage: "13 body and controls, 12 only for ruler labels, 14 panel headings, 20 start screen card titles, 28 start screen heading"
+  spacing: "4 px base: 4, 8, 12, 16, 24, 32; control height 36 comfortable, 32 compact"
+  density: "comfortable default (track row 44 px), compact (32 px) in settings; both read from config so canvas and DOM stay aligned"
+  shape: "radius 6 for controls, 4 for clips, 2 for notes; clips have a 3 px top stripe in the family hue and a soft fill"
+  motion:
+    tokens: "fast 90 ms, base 140 ms, slow 220 ms, ease out for enter, ease in for exit"
+    rules: "only opacity and transform; canvases never animate except the playhead and drag ghosts; prefers-reduced-motion keeps the existing block"
+  icons: "own set only: @thesvg/ui-react exports plus local glyphs in web/app/src/icons/index.tsx (new: loop, metronome, record, scissors, repeat, sparkle for AI, history); no Lucide or Phosphor"
+  styling: "Tailwind only, shared class strings in web/app/src/ui/classes.ts, no inline styles"
+
+performance:
+  rules:
+    - "Canvases draw outside React; React renders chrome only (D11)"
+    - "Four canvas layers per editor: grid (redraw on view change), content (notes or clips, redraw on data or view change), overlay (selection, ghosts, AI preview), playhead (every frame while playing, a 2 px strip only)"
+    - "Draw only what is in view: lanes and notes are culled by index ranges; region previews cap at config.regionPreviewMaxNotes and aggregate when closer than 2 px"
+    - "Track header list is DOM virtualized with VITE_TRACK_OVERSCAN rows of overscan"
+    - "Clip mini previews and audio peaks render in a worker into ImageBitmaps (OffscreenCanvas), keyed by clip id plus content hash"
+    - "Offline render and long exports run in a worker with progress messages and cancel"
+    - "The Store mirrors the project from the change feed (D25) and fetches the full state only on a hash mismatch; full refetch per edit is removed above VITE_FULL_REFRESH_MAX_NOTES"
+    - "Gestures never send commands during a drag; one group on release. When the engine must hear a live value (fader, sound trial) the gesture uses a trial group (D32) and commits once"
+    - "One frame service drives every canvas host and meter, coalesces invalidations and skips frames closer than VITE_MIN_FRAME_MS (default 16) so 120 Hz screens do not double UI work (R01 performance_tactics)"
+    - "Budgets come from env: VITE_FRAME_BUDGET_MS (default 8), VITE_INPUT_BUDGET_MS (50), VITE_OPEN_BUDGET_MS (1500 for the bench default project), VITE_E2E_FIRST_SOUND_MS (10000)"
+  large_project_behavior:
+    - "Open shows the arrangement first with clip outlines, previews fill in from the worker"
+    - "Above VITE_DETAIL_LOD_NOTES notes in view the roll drops note labels and edges"
+    - "Undo history panel pages history.get results (limit 200)"
+  measured_by: "composerDebug draw stats and edit timing, read by e2e scripts in U02 and U27"
+
+accessibility_and_keyboard:
+  model: "Modeless. Letters are shortcuts. The computer keyboard piano is on only while the Keys toggle (K) is on or while Record is armed, so letter shortcuts and piano keys never fight."
+  focus_order: "top bar, arrangement canvas, dock tabs and active panel, footer; Ctrl K opens the palette from anywhere; F6 cycles these regions"
+  announcements: "one aria-live polite region; after each committed command it reads the step label plus a short result ('Moved 4 notes one beat later'); note cursor moves read pitch, bar, beat and length (fixes F36)"
+  canvas_alternatives: "Notes tab offers a note list view (table of pitch, start, length, loudness) editable by keyboard; arrangement offers keyboard clip access (F28)"
+  keys:
+    - "Space: play or pause (context rule above)"
+    - "Enter: play from the last start; in arrangement opens the clip"
+    - "R: record; L: loop on or off; M: metronome; K: keys piano on or off"
+    - "Ctrl Z, Ctrl Shift Z: undo, redo; Ctrl Alt Z: history panel"
+    - "Ctrl C, X, V, D; Ctrl Shift D: repeat x N"
+    - "S: split at playhead; Q: quantize; Delete: remove selection"
+    - "F, Shift F, Home: fit selection, fit song, go to start"
+    - "Ctrl K: command palette listing every command from describe() in plain names, runs through the same Actions"
+    - "Shift plus /: help overlay"
+  shortcuts_as_data: "web/app/src/input/keymap.ts holds key to command id bindings with descriptions; tooltips, the help overlay and the palette read it so docs never drift (R01 lessons 11, 21)"
+  checks: "fixing-accessibility and baseline-ui passes before each wave closes; e2e keyboard only run of F2"
+
+command_api_gaps:
+  rule: "Each gap becomes a decision entry before code, additive only (D9 rule): new commands or methods, optional fields skipped when default so existing files and state_hash values do not change."
+  not_a_gap:
+    - "Copy and paste of notes across clips is a group of add_notes with new ids; clip paste and repeat are groups of duplicate_region. No copy command is needed."
+    - "Tap tempo computes BPM in the client and sends set_tempo."
+  gaps:
+    - decision: D20
+      topic: history read
+      adds: "history.get {limit, offset} returning entries {index, label, source, command_count} and cursor; undo and redo take optional steps; each group carries a source tag (user, ai, template, recipe) set by the client"
+      needed_by: [U20, U21, U25, U26]
+    - decision: D21
+      topic: transport session state
+      adds: "transport.set and transport.get gain loop {on, start, end}, metronome {on}, count_in_bars, follow; saved in the meta section of the project file (D13), not part of state_hash; wasm editor session implements the same methods"
+      needed_by: [U09, U10, U14]
+    - decision: D22
+      topic: bulk note edits
+      adds: "move_notes {region, notes, delta_tick, delta_pitch}, resize_notes {region, notes, delta}, set_notes_velocity {region, notes, value or ramp from to}, delete_notes {region, notes}; each plans to ordinary Change records, capped by MAX_BULK_NOTES"
+      needed_by: [U16, U17]
+    - decision: D23
+      topic: key and theory
+      adds: "set_key {tick, root 0..11, scale} and remove_key in the tempo map (skipped when empty); composer-theory crate with scale and chord tables; read method theory.chords {key} and command conform_notes_to_scale {region, notes}"
+      needed_by: [U12, U13, U18, U19]
+    - decision: D24
+      topic: clip loop and markers
+      adds: "region loop_length (content repeats until the clip length) via set_region_loop; markers add_marker, move_marker, rename_marker, delete_marker for named sections; render, engine blob and format handle both"
+      needed_by: [U23, U29]
+    - decision: D25
+      topic: incremental change feed
+      adds: "execute, group, undo and redo return the primitive Change list; state.changed carries it (or changes.since {hash}); clients fall back to state.get on mismatch"
+      needed_by: [U22, U27]
+    - decision: D26
+      topic: master bus
+      adds: "set_master_volume and one built in reverb (set_master_reverb {size, mix}, set_track_reverb_send {track, send}) applied in composer-engine resolve_mix for render and wasm alike"
+      needed_by: [U28, U29]
+    - decision: D27
+      topic: proposals
+      adds: "proposal.post {label, rationale, commands, source} validated by dry run, proposal.list, proposal.resolve {id, accept or reject}; accept applies as one group with source ai; MCP tool composer_propose; session state, not in state_hash"
+      needed_by: [U25, U26]
+    - decision: D28
+      topic: templates and recipes
+      adds: "templates.list, template.apply {template, params}; recipes.list, recipe.plan {recipe, params, scope} returning commands without applying (deterministic with a seed) from a core crate composer-recipes used by wasm, daemon, CLI and MCP"
+      needed_by: [U24, U26, U29]
+    - decision: D29
+      topic: track sound reference
+      adds: "set_track_sound {track, sound: catalogue id text or null} beside set_instrument; sounds.list includes built in voices with kind builtin; coordinate with T21a which owns sampler playback"
+      needed_by: [U06, U07]
+    - decision: D30
+      topic: project library
+      adds: "library.list, library.rename, library.duplicate, library.delete over the daemon files dir and over OPFS in the browser with the same Backend method names; MCP tools for each"
+      needed_by: [U30]
+    - decision: D32
+      topic: open groups for trials and live gestures
+      adds: "group.begin {label, source} returns a token, group.commit {token}, group.rollback {token}; commands inside apply live; one open group per client, auto rollback on disconnect or after a timeout from env. Editor::begin_group, commit_group and rollback_group already exist in core/composer-commands/src/editor.rs and only need exposing through wasm, daemon and MCP"
+      needed_by: [U07, U08, U20, U26]
+    - decision: D33
+      topic: describe metadata for the palette and agents
+      adds: "describe() entries gain optional verb (add, change, remove, go_to, suggest), label in plain words, keywords and default shortcut id; read method commands.enabled {context} returns per command whether it is possible now, with a reason text"
+      needed_by: [U20, U21, U26]
+    - decision: D31
+      topic: record capture source
+      adds: "no new command; recorded notes commit as add_notes with source user; add an optional label field to group so 'Record 12 notes' shows in history (folded into D20 if accepted together)"
+      needed_by: [U14]
+
+external_tasks:
+  # Tasks from notes/tasks.yaml that U tasks align with instead of duplicating.
+  - id: T19
+    status: done
+    relation: "channel mix in the browser engine; U08 relies on it"
+  - id: T20
+    status: running
+    relation: "covers region drag move and resize, track mix controls, sound catalogue in the instrument menu, daemon open and save. U05, U08 and U30 build on it and must rebase on it"
+  - id: T21
+    status: todo
+    relation: "sounds UI half; T21 executes the U07 spec (categories, search, preview, licence) so there is one picker, not two"
+  - id: T21a
+    status: todo
+    relation: "sampler playback; real sounds for the picker; U06 voices are the fast built in floor until it lands"
+  - id: T22
+    status: todo
+    relation: "beginner start flow; T22 executes the U04 spec, and this plan is the T15 design for the owner"
+  - id: T23
+    status: todo
+    relation: "audio import and streaming; the reference audio track in F1 is covered by T23"
+
+tasks:
+  # Wave 1: biggest beginner win. Order inside the wave is the listed order, 3 workers at a time.
+  - id: U01
+    wave: 1
+    lane: ui
+    size: M
+    needs: []
+    external_needs: []
+    fixes: [F30, F31, F32, F37]
+    title: Workspace shell, tokens v2, resizable split, theme toggle, live announcer
+    brief:
+      files: [web/app/src/index.css, web/app/src/ui/App.tsx, web/app/src/ui/classes.ts, web/app/src/ui/palette.tsx, web/app/src/ui/Dock.tsx (new), web/app/src/ui/EmptyState.tsx (new), web/app/src/ui/canvasHost.ts, web/app/src/ui/Announcer.tsx (new), web/app/src/config.ts]
+      do: "Add the tokens from visual_design.color.add, data-theme toggle (system, light, dark), density setting, bottom dock with Notes, Sound, Mix tabs, a resizable split remembered in localStorage with try and catch (arrangement minimum lanes from env), one shared frame service in canvasHost, an EmptyState component with two action buttons, and an Announcer used by Store.finish to read each committed step label. Footer text 13 px. Narrow layout rules from information_architecture.layout."
+      exit:
+        - "npm run typecheck && npm run lint && npm test pass in web/app"
+        - "e2e script e2e/shell.mjs: dock tabs switch, theme toggle sets data-theme, split drag persists across reload, aria-live text equals the last step label after adding a note"
+        - "node ~/.claude/skills/hallmark/scripts/sloplint.mjs web/app/src reports no errors"
+  - id: U02
+    wave: 1
+    lane: perf
+    size: S
+    needs: []
+    external_needs: []
+    fixes: [F34]
+    title: Browser e2e harness and first sound metrics
+    brief:
+      files: [web/app/e2e/run.mjs (new), web/app/e2e/lib.mjs (new), web/app/e2e/smoke.mjs (new), web/app/src/debug.ts]
+      do: "A node harness that starts vite preview, drives agent-browser (CLI, compact snapshots), reads window.composerDebug through a data attribute dump when script eval is blocked, and exits nonzero on failure. Add composerDebug.firstSoundMs, actionsToFirstSound, commandLog (last 50 labels), undoDepth. No package.json edit; run as node e2e/run.mjs <script>."
+      exit:
+        - "node e2e/run.mjs smoke exits 0 on main and 1 when the Play button is removed locally"
+        - "firstSoundMs is reported for the starter project"
+  - id: U03
+    wave: 1
+    lane: sound
+    size: S
+    needs: []
+    external_needs: []
+    fixes: [F04]
+    title: Starter templates as command data
+    brief:
+      files: [templates/recreate.json (new), templates/cinematic.json (new), templates/calm-hour.json (new), templates/blank.json (new), web/app/tests/templates.test.ts (new)]
+      do: "Each template is {name, description, tempo, key, commands} where ids are placeholders like $t1 resolved by the client with new ids. Loop on over the first clip. Use built in voices from U06 by id when merged, sine and saw until then."
+      exit:
+        - "vitest replays every template through WasmBackend in one group with zero errors and a nonzero note count"
+        - "each template plays sound within 1 bar of the start (first note start under 3840 ticks)"
+  - id: U04
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U01, U02, U03]
+    external_needs: [T22]
+    covered_by: "T22 executes this spec; no second worker"
+    fixes: [F01, F09]
+    title: Start screen and first run card
+    brief:
+      files: [web/app/src/ui/Start.tsx (new), web/app/src/session.ts, web/app/src/state/actions.ts (applyTemplate), web/app/src/ui/NextAction.tsx (new)]
+      do: "Non modal goal sheet over the workspace on first open (primary 'Play the starter', three goal cards, Blank, recents, Not now, Never show, restart from Help), also at #/start. A card click unlocks audio, applies the template as one group with source template, starts playback with loop on and lands on #/p/<id>. First run card over the empty arrangement with three steps, dismissible, remembered. Next action chip with the rule list."
+      exit:
+        - "e2e start-cinematic: firstSoundMs under VITE_E2E_FIRST_SOUND_MS, actionsToFirstSound is 1, undoDepth is 1"
+        - "snapshot shows exactly one data-primary element on the start screen"
+  - id: U05
+    wave: 1
+    lane: ui
+    size: L
+    needs: [U01, U02]
+    external_needs: [T20]
+    covered_by: "drag move and edge resize are covered by T20; U05 adds the rest on top of T20"
+    fixes: [F17, F18, F28]
+    title: Region editing, arrangement navigation and keyboard clip access
+    brief:
+      files: [web/app/src/roll/ArrangementController.ts, web/app/src/roll/geometry.ts, web/app/src/state/commands.ts, web/app/src/ui/ArrangementPanel.tsx, web/app/tests/geometry.test.ts]
+      do: "Per interaction_specs region_move, region_resize, region_split, keyboard_region_access: cross lane move, drop below last lane creates a track, Alt release copies, Esc cancels, S and Alt click split, multi clip selection with Shift, arrangement zoom, Fit and Shift F, horizontal scrollbar, Home."
+      exit:
+        - "vitest: hit tests for body, edges and lanes; snap math at three zoom levels"
+        - "e2e region-edit: move, copy, split each add one undo step and one undo restores the prior state_hash"
+        - "e2e keyboard-clips: Tab to arrangement, arrows reach clip 2, Enter opens it in Notes, announcer reads its bars"
+  - id: U06
+    wave: 1
+    lane: sound
+    size: M
+    needs: []
+    external_needs: []
+    fixes: [F04, F07]
+    title: Eight built in voices that do not sound like a toy
+    brief:
+      files: [core/composer-engine/src/instrument.rs, core/composer-engine/tests/voices.rs, core/composer-wasm/src/blob.rs, core/composer-catalogue/src/lib.rs, notes/decisions.yaml (D29)]
+      do: "Deterministic voices: soft piano, warm pad, warm strings, pluck, sub bass, choir pad, bell, soft pulse, with envelopes, detune and a gentle low pass, new waveform ids, listed by sounds.list as kind builtin. No allocation in the audio path."
+      exit:
+        - "cargo test -p composer-engine -p composer-render -p composer-wasm pass; no_alloc test covers the new voices"
+        - "pinned demo hash 0x9234f99f24d6c39d unchanged; a golden render hash per new voice"
+        - "owner listening check recorded in the report as not run until the owner listens"
+  - id: U07
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U01, U06]
+    external_needs: [T20, T21, T21a]
+    covered_by: "T21 executes this spec; T21a supplies sampler sounds"
+    fixes: [F07, F08]
+    title: Sound browser in the Sound tab
+    brief:
+      files: [web/app/src/ui/SoundBrowser.tsx (new), web/app/src/state/actions.ts, web/app/src/audio/audioEngine.ts (preview voice)]
+      do: "Plain names first, never brand names (R01 lesson 22). Categories (Keys, Strings, Pads, Bass, Plucks, Choir, Bells, Pulse), search, cards with trial audition per interaction_specs sound_audition once D32 lands (preview through the live engine until then), licence line and attribution disclosure, apply with set_instrument or set_track_sound (D29). Changing a sound plays a short chord. Entries without playable data are hidden, not disabled."
+      exit:
+        - "e2e sound-pick: pick Warm pad on track 1, state shows the instrument, one undo step"
+        - "vitest: catalogue entry to category mapping and hidden rule"
+  - id: U08
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U01]
+    external_needs: [T19, T20]
+    covered_by: "mix controls in track headers are covered by T20; U08 adds the Mix tab strips"
+    fixes: [F05]
+    title: Mixer basics in the Mix tab
+    brief:
+      files: [web/app/src/ui/Mixer.tsx (new), web/app/src/audio/audioEngine.ts (per track meter levels), web/app/src/state/commands.ts]
+      do: "One strip per track: volume fader in dB mapped to permille, mute, solo, meter, pan disclosed; keyboard operable sliders with role slider; one command per release (set_track_volume, set_track_pan, set_track_mute, set_track_solo). Master strip appears after U28."
+      exit:
+        - "vitest: dB to permille mapping round trip within 1 permille"
+        - "e2e mixer: mute track 2, meter of track 2 reads 0 while playing, undo unmutes"
+  - id: U09
+    wave: 1
+    lane: interfaces
+    size: M
+    needs: []
+    external_needs: []
+    fixes: [F03, F19]
+    title: Transport session state with loop, metronome and count in (D21)
+    brief:
+      files: [notes/decisions.yaml (D21), core/composer-wasm/src/editor_session.rs, core/composer-wasm/src/ffi.rs, core/composer-format/src/meta.rs, daemon/composerd/src/methods.rs, mcp/composer-mcp/src/tools.rs, web/app/src/backend/types.ts, web/app/src/backend/wasmBackend.ts, web/app/src/backend/daemonBackend.ts]
+      do: "Extend transport.get and transport.set with loop, metronome, count_in_bars and follow; wasm editor exports the same; values saved in meta, not hashed; MCP composer_transport_set schema gains the fields."
+      exit:
+        - "cargo test -p composerd -p composer-mcp -p composer-wasm -p composer-format pass"
+        - "parity test: set loop through MCP, read it through the daemon, state_hash unchanged"
+        - "web vitest: both backends round trip transport fields"
+  - id: U10
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U01, U09]
+    external_needs: []
+    fixes: [F19, F03, F33]
+    title: Transport v2 (ruler seek, loop brace, metronome, count in, follow)
+    brief:
+      files: [web/app/src/ui/TopBar.tsx, web/app/src/audio/worklet.ts, web/app/src/audio/audioEngine.ts, web/app/src/roll/ArrangementController.ts, web/app/src/roll/RollController.ts, web/app/src/time.ts]
+      do: "Per interaction_specs transport. Click generated in the worklet, loop wrap sample accurate in the song engine, loop defaults to the selected clip for templates, follow toggle."
+      exit:
+        - "vitest: loop wrap and seek math in time.ts"
+        - "e2e transport: ruler click at bar 3 moves the playhead there; loop over bars 1 to 2 wraps (playhead never passes bar 3 over 10 s)"
+  - id: U11
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U05]
+    external_needs: []
+    fixes: [F16]
+    title: Copy, cut, paste, duplicate and repeat for notes and clips
+    brief:
+      files: [web/app/src/state/clipboard.ts (new), web/app/src/state/actions.ts, web/app/src/state/commands.ts, web/app/tests/clipboard.test.ts (new)]
+      do: "Per interaction_specs copy_paste and region_duplicate_and_repeat, built only from add_notes, delete_note, resize_region and duplicate_region groups; Repeat x N dialog capped by VITE_MAX_REPEAT."
+      exit:
+        - "vitest: paste offset math across bars and time signatures; ids are fresh"
+        - "e2e clipboard: copy bar 1 notes, paste at bar 5, notes appear 4 bars later; repeat a clip 4 times is one undo step"
+  - id: U12
+    wave: 1
+    lane: core
+    size: S
+    needs: []
+    external_needs: []
+    fixes: [F10]
+    title: Project key and scale tables (D23 part 1)
+    brief:
+      files: [notes/decisions.yaml (D23), core/composer-theory (new crate), core/composer-model/src/project.rs, core/composer-commands/src/command.rs, core/composer-commands/src/describe.rs, core/composer-wasm/src/ffi.rs, web/app/src/model.ts]
+      do: "set_key and remove_key in the tempo map, skipped when empty; composer-theory with scale membership for major, minor, dorian, mixolydian, pentatonic major and minor, harmonic minor; wasm export of scale pitch classes."
+      exit:
+        - "cargo test -p composer-theory -p composer-commands -p composer-model pass; state_hash of existing goldens unchanged"
+        - "MCP tool count tests updated and passing (cargo test -p composer-mcp)"
+  - id: U13
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U01, U12]
+    external_needs: []
+    fixes: [F10, F11, F13, F26]
+    title: Piano roll beginner pass (key shading, stay in key, scrollbars, labels)
+    brief:
+      files: [web/app/src/roll/RollController.ts, web/app/src/ui/PianoRoll.tsx, web/app/src/ui/TopBar.tsx (key picker), web/app/src/ui/palette.tsx]
+      do: "Key picker, out of key shading, Stay in key toggle, visible vertical scrollbar, scroll to the clip's notes on open, pitch and bar tooltip on drag, octave readout by the keyboard, note names on C rows."
+      exit:
+        - "vitest: pitch to in key mapping and snap to nearest in key pitch"
+        - "e2e roll-key: set A minor, draw on a G sharp row with Stay in key on, the note lands on A or G"
+  - id: U14
+    wave: 1
+    lane: ui
+    size: M
+    needs: [U10]
+    external_needs: []
+    fixes: [F25]
+    title: Record from the computer keyboard and MIDI
+    brief:
+      files: [web/app/src/input/liveInput.ts, web/app/src/state/actions.ts, web/app/src/ui/TopBar.tsx, web/app/src/audio/audioEngine.ts (capture clock)]
+      do: "Per interaction_specs record; Keys toggle rule from accessibility_and_keyboard.model; held keys light up on the roll keyboard."
+      exit:
+        - "vitest with fake clock: captured events become notes with correct ticks at 2 tempos; quantize toggle applies"
+        - "e2e record: arm, count in, send 4 synthetic key presses, stop, clip gains 4 notes in one undo step"
+  - id: U15
+    wave: 1
+    lane: ui
+    size: S
+    needs: [U01]
+    external_needs: []
+    fixes: [F02, F06, F12, F14, F20, F21, F22, F27, F29, F38, F39, F40]
+    title: Plain language, save clarity and help overlay
+    brief:
+      files: [web/app/src/ui/TopBar.tsx, web/app/src/ui/StatusBar.tsx, web/app/src/ui/PianoRoll.tsx, web/app/src/ui/App.tsx, web/app/src/ui/Help.tsx (new), web/app/src/ui/EnvDialog.tsx (new), web/app/src/input/keymap.ts (new), web/app/src/config.ts]
+      do: "Footer with autosave time, sample rate, latency and storage use; plain dialogs for known environment failures (no AudioWorklet, no SharedArrayBuffer, storage full, MIDI denied) instead of raw alerts (R01 lessons 13, 14, 20); keymap.ts as the single shortcut source. Rename labels per P4 (Save to file, Grid: eighth notes, Editing: Pad, bars 1 to 4), grid Off plus default eighth, time signature select, 'Saved in this browser at 14:02' footer with one time storage notice, daemon only token hint, undo tooltips with step label, delete track toast with Undo, Space context fix, MIDI failure reason, confirm delete over VITE_CONFIRM_DELETE_NOTES notes, Shift plus / help overlay."
+      exit:
+        - "vitest: banned label list against rendered chrome text"
+        - "e2e: Space on a focused Save to file button activates the button and does not start playback"
+  # Wave 2: editing depth and correctness at scale.
+  - id: U16
+    wave: 2
+    lane: core
+    size: M
+    needs: []
+    external_needs: []
+    fixes: [F16]
+    title: Bulk note commands (D22)
+    brief:
+      files: [notes/decisions.yaml (D22), core/composer-commands/src/command.rs, core/composer-commands/src/describe.rs, core/composer-commands/src/tests_bulk.rs, web/app/src/model.ts, mcp/composer-mcp/tests/conformance.rs]
+      do: "move_notes, resize_notes, set_notes_velocity (value or ramp), delete_notes per the gap entry."
+      exit:
+        - "cargo test -p composer-commands -p composer-mcp -p composerd pass"
+        - "a 10000 note move_notes runs under COMPOSER_BENCH_MAX_APPLY_NS times 10000"
+  - id: U17
+    wave: 2
+    lane: ui
+    size: L
+    needs: [U16, U13]
+    external_needs: []
+    fixes: [F36, F34, F12]
+    title: Piano roll multi select, bulk edit, velocity, quantize and note list view
+    brief:
+      files: [web/app/src/roll/RollController.ts, web/app/src/roll/geometry.ts, web/app/src/state/commands.ts, web/app/src/ui/PianoRoll.tsx, web/app/src/ui/NoteList.tsx (new)]
+      do: "Per interaction_specs roll_select, roll_quantize, velocity; status line shows keys for the selection; note list view; announcer reads note cursor moves."
+      exit:
+        - "vitest: marquee hit sets, ramp values, quantize preview equals core quantize result for 50 random notes"
+        - "e2e roll-bulk: marquee 200 notes, drag up 2 semitones, one undo step, undo restores hash"
+  - id: U18
+    wave: 2
+    lane: core
+    size: M
+    needs: [U12]
+    external_needs: []
+    fixes: [F10]
+    title: Chords and conform to scale (D23 part 2)
+    brief:
+      files: [core/composer-theory, core/composer-commands/src/command.rs, core/composer-wasm/src/ffi.rs, daemon/composerd/src/methods.rs, mcp/composer-mcp/src/tools.rs]
+      do: "theory.chords {key} returning diatonic triads and sevenths with plain names and pitches; conform_notes_to_scale command; available in wasm, daemon and MCP."
+      exit:
+        - "cargo test -p composer-theory -p composerd -p composer-mcp pass; chord tables golden tested"
+  - id: U19
+    wave: 2
+    lane: ui
+    size: M
+    needs: [U18, U17]
+    external_needs: []
+    fixes: [F10]
+    title: Chord strip
+    brief:
+      files: [web/app/src/ui/ChordStrip.tsx (new), web/app/src/state/actions.ts, web/app/src/ui/PianoRoll.tsx]
+      do: "Per interaction_specs scale_and_chord_helpers chord part; inversions disclosed; preview chord on hover through the live engine."
+      exit:
+        - "e2e chord: in C major click Am at bar 2, clip gains A, C, E at bar 2 in one undo step"
+  - id: U20
+    wave: 2
+    lane: core
+    size: M
+    needs: []
+    external_needs: []
+    fixes: [F21, F06]
+    title: History read, step jumps, source tags, open groups and describe metadata (D20, D32, D33)
+    brief:
+      files: [notes/decisions.yaml (D20), core/composer-commands/src/editor.rs, core/composer-wasm/src/ffi.rs, daemon/composerd/src/methods.rs, mcp/composer-mcp/src/tools.rs, cli/composer-cli/src/plan.rs]
+      do: "history.get with paging, undo and redo with steps, source on groups, CLI composer history; group.begin, commit and rollback exposed with a timeout from env; describe() verb, label, keywords and commands.enabled."
+      exit:
+        - "cargo test -p composer-commands -p composerd -p composer-mcp -p composer-cli pass; replay script covers undo steps 3"
+  - id: U21
+    wave: 2
+    lane: ui
+    size: M
+    needs: [U20, U15]
+    external_needs: []
+    fixes: [F21, F39]
+    title: History panel and command palette
+    brief:
+      files: [web/app/src/ui/History.tsx (new), web/app/src/ui/Palette.tsx (new), web/app/src/state/store.ts]
+      do: "Per interaction_specs undo_history; Ctrl K palette with verbs from describe() metadata (D33), word start matching and local usage ranking; disabled entries show the reason from commands.enabled; runs the matching Actions method or a small form built from field types (R01 lesson 5)."
+      exit:
+        - "e2e history: make 5 edits, click step 2, state_hash equals the hash recorded after edit 2"
+        - "vitest: every describe() command has a palette entry with a plain name"
+  - id: U22
+    wave: 2
+    lane: core
+    size: L
+    needs: [U02]
+    external_needs: []
+    fixes: [F34]
+    title: Incremental change feed and client mirror (D25)
+    brief:
+      files: [notes/decisions.yaml (D25), core/composer-commands/src/editor.rs, core/composer-wasm/src/ffi.rs, daemon/composerd/src/hub.rs, web/app/src/state/store.ts, web/app/src/backend/wasmBackend.ts, web/app/src/backend/daemonBackend.ts, web/app/tests/store.test.ts]
+      do: "Return Change lists from execute, group, undo, redo; Store applies them to its mirror and checks the hash; full state only on mismatch."
+      exit:
+        - "vitest: 1000 random commands and undos, mirror hash equals backend state_hash after each"
+        - "cargo test -p composer-commands -p composer-wasm -p composerd pass"
+  # Wave 3: AI assist, long form and scale.
+  - id: U23
+    wave: 3
+    lane: core
+    size: L
+    needs: []
+    external_needs: []
+    fixes: [F03]
+    title: Clip loop length and markers (D24)
+    brief:
+      files: [notes/decisions.yaml (D24), core/composer-model/src/project.rs, core/composer-commands/src/command.rs, core/composer-engine/src/schedule.rs, core/composer-render/src/lib.rs, core/composer-wasm/src/blob.rs, core/composer-format]
+      do: "set_region_loop and marker commands; engine and render repeat looped content; blob carries loop length; format round trip."
+      exit:
+        - "cargo test for model, commands, engine, render, wasm, format pass; demo hash unchanged"
+        - "a 60 minute project from one 8 bar looped clip renders under COMPOSER_BENCH_MAX_RENDER_RTF"
+  - id: U24
+    wave: 3
+    lane: core
+    size: L
+    needs: [U03, U18, U23]
+    external_needs: []
+    fixes: []
+    title: Templates and recipes crate (D28)
+    brief:
+      files: [notes/decisions.yaml (D28), core/composer-recipes (new crate), templates/, core/composer-wasm/src/ffi.rs, daemon/composerd/src/methods.rs, mcp/composer-mcp/src/tools.rs]
+      do: "Move template loading into the crate; recipes extend_to_length, repeat_with_variation, bass_from_chords, pad_under_melody, soften_velocity, calm_sections; recipe.plan returns commands deterministically for a seed."
+      exit:
+        - "cargo test -p composer-recipes pass with golden command lists per recipe and seed"
+        - "every recipe plan passes dry run on each template"
+  - id: U25
+    wave: 3
+    lane: interfaces
+    size: M
+    needs: [U20]
+    external_needs: []
+    fixes: []
+    title: Proposals channel for AI clients (D27)
+    brief:
+      files: [notes/decisions.yaml (D27), daemon/composerd/src/methods.rs, core/composer-wasm/src/editor_session.rs, mcp/composer-mcp/src/tools.rs, cli/composer-cli/src/main.rs]
+      do: "proposal.post, list, resolve; accept applies one group with source ai; MCP composer_propose and CLI composer propose."
+      exit:
+        - "cargo test -p composerd -p composer-mcp -p composer-cli pass; parity test posts through MCP and resolves through the daemon"
+  - id: U26
+    wave: 3
+    lane: ui
+    size: L
+    needs: [U24, U25, U21]
+    external_needs: []
+    fixes: [F01]
+    title: AI assist inside the command palette
+    brief:
+      files: [web/app/src/ui/Palette.tsx, web/app/src/ui/AssistCard.tsx (new), web/app/src/roll/RollController.ts (overlay ghosts), web/app/src/roll/ArrangementController.ts (overlay ghosts), web/app/src/state/actions.ts]
+      do: "Suggest section of the palette: cards from recipes for the current selection plus agent proposals (badge on the Ask button); Preview runs dry run and draws ghosts with --color-ghost and change counts; Apply runs one group with source ai; Undo on the card; show commands disclosed; next action chip reads the same list."
+      exit:
+        - "e2e assist: preview leaves state_hash unchanged, apply adds one history entry with source ai, card Undo restores the hash"
+  - id: U27
+    wave: 3
+    lane: perf
+    size: L
+    needs: [U22, U05]
+    external_needs: []
+    fixes: [F34]
+    title: Scale pass (layers, virtualization, worker previews, budgets)
+    brief:
+      files: [web/app/src/ui/canvasHost.ts, web/app/src/roll/RollController.ts, web/app/src/roll/ArrangementController.ts, web/app/src/ui/ArrangementPanel.tsx, web/app/src/workers/preview.ts (new), web/app/src/config.ts, web/app/e2e/stress.mjs (new)]
+      do: "Per performance.rules; four layers; virtualized track list; worker previews; ?stress gains tracks and regions parameters matching the bench default."
+      exit:
+        - "e2e stress-300: open under VITE_OPEN_BUDGET_MS, p95 draw under VITE_FRAME_BUDGET_MS during a 5 s pan, edit shown under VITE_INPUT_BUDGET_MS"
+  - id: U28
+    wave: 3
+    lane: core
+    size: L
+    needs: []
+    external_needs: []
+    fixes: [F04]
+    title: Master bus volume and reverb (D26)
+    brief:
+      files: [notes/decisions.yaml (D26), core/composer-engine/src/mix.rs, core/composer-engine/src/engine.rs, core/composer-render/src/lib.rs, core/composer-wasm/src/blob.rs, core/composer-commands/src/command.rs]
+      do: "Master volume and one deterministic algorithmic reverb with send per track, no allocation in the audio path, same code in render and wasm."
+      exit:
+        - "cargo test for engine, render, wasm, commands pass; no_alloc covers reverb; wasm and native outputs equal bit for bit in composer-wasm/tests/mix.rs"
+  # Wave 4: long form flow, library, finish.
+  - id: U29
+    wave: 4
+    lane: ui
+    size: L
+    needs: [U23, U24, U28, U10, U08]
+    external_needs: []
+    fixes: [F24]
+    title: Calm hour flow, sections lane, master strip and export sheet
+    brief:
+      files: [web/app/src/ui/Export.tsx (new), web/app/src/workers/render.ts (new), web/app/src/audio/offline.ts, web/app/src/ui/Mixer.tsx, web/app/src/roll/ArrangementController.ts (section lane)]
+      do: "Mood and length picker runs recipes; section lane with markers, click to jump, loop a section; master strip with reverb; export sheet with length choice, worker render with progress, time left and cancel, attribution file when sounds need it; daemon mode uses render.wav and export.midi."
+      exit:
+        - "e2e calm-hour: 5 actions from start to export started; cancel stops the worker within 1 s"
+        - "vitest: export length choice to tick range"
+  - id: U30
+    wave: 4
+    lane: interfaces
+    size: M
+    needs: [U04]
+    external_needs: [T20]
+    fixes: [F22, F23]
+    title: Project library and Open (project or MIDI) (D30)
+    brief:
+      files: [notes/decisions.yaml (D30), daemon/composerd/src/files.rs, daemon/composerd/src/methods.rs, mcp/composer-mcp/src/tools.rs, web/app/src/backend/types.ts, web/app/src/persistence.ts (OPFS), web/app/src/ui/Start.tsx]
+      do: "Library methods over the daemon files dir and OPFS with the same Backend names; Start screen recents and all projects with rename, duplicate, delete; Open accepts .cmpf and .mid (import through composer-midi)."
+      exit:
+        - "cargo test -p composerd -p composer-mcp pass; path rules from D16 tested for rename"
+        - "e2e library: make 2 projects, rename one, reload, both listed with the new name"
+
+waves:
+  - wave: 1
+    goal: "A beginner hears music in one click, edits clips and notes directly, copies and repeats, picks real sounds, mixes, loops and records."
+    tasks: [U01, U02, U03, U04, U05, U06, U07, U08, U09, U10, U11, U12, U13, U14, U15]
+    order: "batch a U01 U02 U06 (plus T20 finishing); batch b U03 U09 U12 U15; batch c U04 (T22) U05 U08; batch d U07 (T21) U10 U13; batch e U11 U14"
+  - wave: 2
+    goal: "Piano roll power tools and history without slowdown."
+    tasks: [U16, U17, U18, U19, U20, U21, U22]
+  - wave: 3
+    goal: "AI assist with preview and undo, long form engine features, scale pass."
+    tasks: [U23, U24, U25, U26, U27, U28]
+  - wave: 4
+    goal: "Calm hour end to end, export, library."
+    tasks: [U29, U30]
+
+risks:
+  - id: K1
+    risk: "One workspace with a bottom dock may cramp the roll on 13 inch laptops"
+    mitigation: "resizable split, Notes tab maximise on double click of the tab"
+    measure: "split position users settle on; time spent scrolling the roll"
+  - id: K2
+    risk: "Keys piano behind a toggle changes M1 behavior where letters always played notes"
+    mitigation: "the Keys toggle is on by default in the Recreate template and shows a hint"
+    measure: "how often users press letters with Keys off and get a shortcut they did not expect (commandLog right after a letter, undone within 3 s)"
+  - id: K3
+    risk: "Built in synth voices may still sound stock to the owner"
+    mitigation: "T21a sampler in parallel; picker hides unplayable entries"
+    measure: "owner listening rating per voice; previews per pick before choosing"
+  - id: K4
+    risk: "Clip loop length (D24) touches model, engine, render, format and every client"
+    mitigation: "optional field skipped by default, demo hash gate, wave 3 only"
+    measure: "bench render RTF and format round trip in CI"
+  - id: K5
+    risk: "Change feed mirror (D25) can drift from the core"
+    mitigation: "hash check after each change and fallback to full state"
+    measure: "count of fallbacks in composerDebug per session"
+  - id: K6
+    risk: "In the browser alone there is no language model; the palette Suggest section shows recipes only until an agent connects through composerd and MCP"
+    mitigation: "recipes are useful alone; Suggest copy says how to connect an agent"
+    measure: "recipe accept rate and undo within 10 s after apply"
+  - id: K7
+    risk: "Transport state outside state_hash (D21) may surprise agents that diff by hash"
+    mitigation: "transport.get documented in MCP tool descriptions as session state"
+    measure: "agent test scripts that set loop then verify"
+  - id: K8
+    risk: "System font stack makes the product look generic"
+    mitigation: "identity carried by family hues, clip stripes and the calm palette"
+    measure: "owner reaction on screenshots at the end of wave 1"
+user_testing:
+  sessions: "5 beginners, think aloud, 30 minutes, tasks F1, F2, F3 in that order, Chrome on their own laptop"
+  measure:
+    - "seconds and actions to first sound (composerDebug.firstSoundMs, actionsToFirstSound)"
+    - "seconds to a saved 4 bar idea"
+    - "undo per minute and undo within 3 s (confusion signal)"
+    - "panels opened before the first note"
+    - "share of sessions that reach export"
+    - "previews per sound pick"
+    - "AI card apply then undo rate"
+    - "p95 draw time on their machine"
+    - "the step where each abandoned session stopped"
+  storage: "local only, exported as JSON from the help menu by the tester; nothing sent anywhere"
+
+r01_folded_in:
+  borrowed: ["1 non modal tour with Not now and Never show", "2 open the new clip in the editor", "3 empty states with two actions", "4 trial audition (D32)", "5 verb palette (D33)", "6 double click place and remove", "7 scale mask, follow key, Fit to key", "8 and 9 part aware drags, one undo step, Escape cancels", "10 auto grid", "11 and 21 shortcuts as data", "13 footer with latency and storage", "14 and 20 plain environment dialogs", "15 progress with cancel (U29)", "22 plain sound names", "23 overlap toast with Undo", "24 history list", "25 one primary action on first open"]
+  avoided: ["gesture only actions (P5)", "squeezed arrangement (minimum lanes)", "hidden scrollbars (visible scrollbars in U05 and U13)", "canvas without an accessible model (note list, keyboard clips, announcer)"]
+  conflicts_with_audit:
+    - topic: first screen
+      audit: "keep instant start into the starter (good_to_keep), F01 first run card"
+      r01: "short guided path with one primary action (lessons 1, 25)"
+      chosen: "the workspace opens with the starter behind a non modal goal sheet whose primary is Play the starter; keeps 1 action to first sound and gives the guided path"
+    - topic: grid default
+      audit: "F40 fixed eighth default plus Off"
+      r01: "lesson 10 snap follows zoom"
+      chosen: "Auto with its current value named in plain words, plus Off; removes a choice and keeps the plain label the audit asked for"
+    - topic: new clip length
+      audit: "good_to_keep 4 bar clip on Add track"
+      r01: "lesson 2 one bar clip"
+      chosen: "4 bars (room for a phrase, matches config.defaultRegionBars) and open it in Notes as R01 suggests"
+    - topic: AI assist location
+      audit: "no position"
+      r01: "palette is the natural home"
+      chosen: "inside the palette, so no side rail chrome; agent proposals raise a badge on the Ask button"

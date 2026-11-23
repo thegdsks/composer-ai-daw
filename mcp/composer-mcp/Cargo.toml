@@ -1,0 +1,21 @@
+[package]
+name = "composer-mcp"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+name = "composer_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "composer-mcp"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+# Same sync WebSocket client stack composerd serves with, only used in remote mode.
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+# OS randomness for composer_new_id, same crate composerd uses for its ids.
+getrandom = "0.3"

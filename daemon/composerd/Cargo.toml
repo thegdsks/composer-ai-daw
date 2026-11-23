@@ -1,0 +1,35 @@
+[package]
+name = "composerd"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+name = "composerd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "composerd"
+path = "src/main.rs"
+
+[dependencies]
+composer-audio = { path = "../../core/composer-audio" }
+composer-commands = { path = "../../core/composer-commands" }
+composer-model = { path = "../../core/composer-model" }
+composer-engine = { path = "../../core/composer-engine" }
+composer-format = { path = "../../core/composer-format" }
+composer-midi = { path = "../../core/composer-midi" }
+composer-render = { path = "../../core/composer-render" }
+composer-catalogue = { path = "../../core/composer-catalogue" }
+composer-theory = { path = "../../core/composer-theory" }
+composer-recipes = { path = "../../core/composer-recipes" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Sync WebSocket, no async runtime: one thread per client is enough for a local daemon.
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+# OS randomness for the pairing token and session ids.
+getrandom = "0.3"
+
+[dev-dependencies]
+composer-wasm = { path = "../../core/composer-wasm" }

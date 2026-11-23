@@ -1,0 +1,52 @@
+# Dependency licence check against AGPL-3.0-only, 2026-11-23.
+# Rust: cargo metadata over the workspace (all targets, dev dependencies included), third party packages only.
+# npm: web/app/package-lock.json license fields (production and development separated by the dev flag).
+verdict: "No dependency is incompatible with AGPL-3.0-only. Nothing was removed. Two items are worth knowing about (see flagged)."
+rust:
+  third_party_packages: 38
+  by_licence:
+    - {licence: "MIT OR Apache-2.0", count: 28}
+    - {licence: "MIT", count: 3, packages: [bytes, data-encoding, zmij]}
+    - {licence: "MIT OR Apache-2.0 OR LGPL-2.1-or-later", count: 2, packages: [r-efi]}
+    - {licence: "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT", count: 2, packages: [wasip2, wit-bindgen]}
+    - {licence: "Apache-2.0 OR MIT", count: 1, packages: [const-oid]}
+    - {licence: "Unlicense OR MIT", count: 1, packages: [memchr]}
+    - {licence: "(MIT OR Apache-2.0) AND Unicode-3.0", count: 1, packages: [unicode-ident]}
+  no_licence_field: []
+npm_production:
+  total: 4
+  by_licence:
+    - {licence: "MIT", count: 4, packages: ["@thesvg/ui-react", react, react-dom, scheduler]}
+  no_licence_field: []
+npm_development:
+  total: 231
+  note: "Build and test tooling only. Not shipped in the built app."
+  by_licence:
+    - {licence: "MIT", count: 179}
+    - {licence: "Apache-2.0", count: 16}
+    - {licence: "MPL-2.0", count: 12, packages: [lightningcss and its 11 platform binaries]}
+    - {licence: "ISC", count: 10}
+    - {licence: "BSD-2-Clause", count: 6}
+    - {licence: "BlueOak-1.0.0", count: 3, packages: ["@isaacs/nonrecursive-glob-match", graceful-fs, minimatch]}
+    - {licence: "0BSD", count: 2, packages: [tslib]}
+    - {licence: "BSD-3-Clause", count: 2, packages: [esquery, source-map-js]}
+    - {licence: "CC-BY-4.0", count: 1, packages: [caniuse-lite]}
+  no_licence_field: []
+flagged:
+  - package: "lightningcss (npm, development only, via the CSS toolchain)"
+    licence: "MPL-2.0"
+    concern: "File level copyleft. Compatible with AGPL-3.0 (MPL-2.0 section 3.3 allows combination). Used only at build time."
+    recommendation: "No action. Keep it as a dev dependency."
+  - package: "caniuse-lite (npm, development only)"
+    licence: "CC-BY-4.0"
+    concern: "A data licence, not a software licence. Attribution applies only if the data is redistributed. It is not bundled into the app."
+    recommendation: "No action. If a future build ships it, add attribution."
+  - package: "r-efi (Rust)"
+    licence: "MIT OR Apache-2.0 OR LGPL-2.1-or-later"
+    concern: "Triple licence. Used under MIT or Apache-2.0, no copyleft obligation."
+    recommendation: "No action."
+  - package: "sounds/catalogue.yaml entries (not dependencies)"
+    licence: "mixed (CC0, CC BY and others, recorded per entry)"
+    concern: "No third party audio is stored in the repository. Packs are fetched by the user with sounds/fetch.sh. Several entries are not auditioned and some licence pages were only partly read."
+    recommendation: "Re-read each licence page before bundling any pack into a release."
+not_found: [GPL-2.0-only, SSPL, proprietary, CC-BY-NC, missing licence fields, non OSI licences]

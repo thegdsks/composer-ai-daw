@@ -1,0 +1,73 @@
+[
+  {
+    "command": "add_track",
+    "id": "406d320930a1311208696c2cf4d32a33",
+    "index": null,
+    "kind": "instrument",
+    "name": "Bass"
+  },
+  {
+    "command": "set_instrument",
+    "instrument": "00000000000000000000000000000001",
+    "track": "406d320930a1311208696c2cf4d32a33"
+  },
+  {
+    "command": "set_track_sound",
+    "sound": "builtin-sub-bass",
+    "track": "406d320930a1311208696c2cf4d32a33"
+  },
+  {
+    "command": "set_track_volume",
+    "track": "406d320930a1311208696c2cf4d32a33",
+    "volume": 700
+  },
+  {
+    "command": "add_region",
+    "id": "8fd0fe3f8a928d7e638f0c608473091f",
+    "kind": "midi",
+    "length": 15360,
+    "start": 0,
+    "track": "406d320930a1311208696c2cf4d32a33"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 3840,
+        "id": "5520136e88114490c2767272d84a7e95",
+        "pitch": 36,
+        "start": 0,
+        "velocity": 76
+      },
+      {
+        "duration": 1920,
+        "id": "de3fa58f7a72d89f7a8579e5dd7555f1",
+        "pitch": 45,
+        "start": 3840,
+        "velocity": 76
+      },
+      {
+        "duration": 1920,
+        "id": "98a7fd5ad0daef610c7901bb3de86e96",
+        "pitch": 52,
+        "start": 5760,
+        "velocity": 70
+      },
+      {
+        "duration": 3840,
+        "id": "2a83de807e593e9d3e505f8d17f73a38",
+        "pitch": 41,
+        "start": 7680,
+        "velocity": 76
+      },
+      {
+        "duration": 3840,
+        "id": "32622d052e76e19295087f7525d625a1",
+        "pitch": 43,
+        "start": 11520,
+        "velocity": 76
+      }
+    ],
+    "region": "8fd0fe3f8a928d7e638f0c608473091f"
+  }
+]

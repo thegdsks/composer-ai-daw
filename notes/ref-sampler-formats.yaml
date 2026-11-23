@@ -1,0 +1,61 @@
+# Sampler file format facts (T21a), in our own words. Sources are the public specs, not DAW code.
+# verified: sfz facts read on sfzformat.com pages on 2026-11-23. sf2 facts come from the SoundFont 2.04 spec
+# (synthfont.com/sfspec24.pdf was fetched but its text could not be machine extracted in the session, so the
+# numbers below were written from knowledge of the spec and are covered by tests built from the same numbers;
+# re-check them against the PDF before trusting exotic files).
+glossary:
+  bank: SampleBank, the in-memory instrument (samples plus zones)
+  zone: Zone, one playable region (key range, velocity range, sample, tuning, loop, envelope)
+sf2:
+  src: "https://www.synthfont.com/sfspec24.pdf (sections 6 to 8)"
+  container:
+    - "RIFF form type sfbk holding three LIST chunks: INFO, sdta, pdta. Chunks are little endian, sizes are padded to even."
+    - "sdta holds smpl (mono signed 16 bit PCM, all samples back to back) and optionally sm24 (extra low byte for 24 bit, we ignore it)."
+    - "pdta holds nine chunks with fixed record sizes and a terminal record each: phdr 38, pbag 4, pmod 10, pgen 4, inst 22, ibag 4, imod 10, igen 4, shdr 46."
+  records:
+    phdr: "name[20], preset u16, bank u16, bag index u16, 3 u32 reserved"
+    bag: "generator index u16, modulator index u16; a zone owns generators from its index up to the next bag's index"
+    gen: "operator u16, amount 2 bytes (two u8 for ranges, else i16)"
+    inst: "name[20], bag index u16"
+    shdr: "name[20], start u32, end u32, loop start u32, loop end u32, sample rate u32, original pitch u8 (255 unknown), pitch correction i8 cents, link u16, type u16 (1 mono, 2 right, 4 left, bit 15 ROM)"
+  zones:
+    - "A zone whose last generator is not instrument (preset level) or sampleID (instrument level) is the global zone, only allowed first; its generators are defaults for the others."
+    - "Preset zone points at an instrument, instrument zone points at a sample. Instrument level values are absolute, preset level values add on top (ranges intersect)."
+  generators_used:
+    keyRange: "43, lo byte then hi byte"
+    velRange: "44, same"
+    initialAttenuation: "48, centibels, 0 is full level"
+    pan: "17, tenths of a percent, -500 hard left to 500 hard right"
+    coarseTune: "51 semitones"
+    fineTune: "52 cents"
+    scaleTuning: "56 cents per key, default 100"
+    overridingRootKey: "58, 0..127 else shdr original pitch"
+    sampleModes: "54, low two bits: 0 none, 1 loop continuous, 3 loop while key down then play the rest"
+    loop_offsets: "2 start loop fine, 3 end loop fine, 45 start loop coarse, 50 end loop coarse (coarse is 32768 frames)"
+    volume_envelope: "34 attack, 36 decay, 38 release in timecents (seconds = 2 to the power tc/1200, default -12000 is about 1 ms); 37 sustain is centibels of attenuation (level = 10 to the power minus cb/200)"
+    sampleID: "53"
+    instrument: "41"
+  loop_points: "shdr loop points are absolute in the smpl chunk; we make them relative to the sample start. The loop end is the first frame after the loop."
+  ignored: "start and end address offsets (0, 1, 4, 12), delay and hold envelope phases, filters, LFOs, modulators, key and velocity number overrides (46, 47), exclusive class, ROM samples, sm24, linked stereo handling beyond per zone pan, 24 bit."
+  failure_modes: ["indices past the end of a table", "loop points outside the sample", "sample end before start", "smpl smaller than shdr claims", "record count from chunk size not a multiple of the record size", "ranges with lo above hi", "preset with no zones"]
+sfz:
+  src: "https://sfzformat.com/headers/region/ and https://sfzformat.com/opcodes/<name>/ (loop_mode, ampeg_sustain, pitch_keycenter, pan, tune)"
+  syntax:
+    - "Plain text. Headers in angle brackets (control, global, master, group, region) open a scope; opcodes are name=value. Opcodes inherit from enclosing headers, a new region starts from the group, master and global values."
+    - "Opcode values run until the next token that looks like name=; so a sample path may contain spaces. Comments are // to end of line and /* */."
+  opcodes_used:
+    sample: "path relative to the sfz (control default_path is prefixed)"
+    key_ranges: "lokey hikey; key sets lokey hikey and pitch_keycenter together. Values are numbers 0..127 or note names such as c4 (60 in this convention), c#4, db4"
+    vel_ranges: "lovel hivel 0..127"
+    pitch_keycenter: "root key"
+    tune: "cents; transpose: semitones"
+    loop_mode: "no_loop, one_shot (plays to the end, note off ignored), loop_continuous, loop_sustain. If absent the first loop stored in the wav smpl chunk is used, else no loop"
+    loop_start_end: "loop_start and loop_end in frames; loop_end is the last frame of the loop (inclusive), unlike SF2"
+    ampeg: "ampeg_attack ampeg_decay ampeg_release seconds, ampeg_sustain percent (default 100)"
+    volume: "dB"
+    pan: "-100..100"
+    offset_end: "sample start and end frames (offset, end), clamped to the file"
+  ignored: "include and define, loops from other wav chunks, round robin, sequences, filters, LFOs, CC modulation, delay, hold, ARIA extensions, cross fades, groups with off_by"
+wav:
+  note: "RIFF WAVE with fmt (PCM 8/16/24/32 int or float32, 1 or 2 channels) and data; optional smpl chunk carries loops (36 byte header then 24 byte loop records: id, type, start, end inclusive, fraction, count)"
+  failure_modes: ["data chunk longer than the file", "block align not matching channels and bits", "zero channels or rate", "huge frame counts from a tiny header"]

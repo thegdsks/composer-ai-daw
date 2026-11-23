@@ -1,0 +1,448 @@
+# Verified reference map of WebCLAP (WASM CLAP plugins in the browser). Paths in src: are relative to
+# <reference checkout>/webclap-browser-test-host (called "host") or <reference checkout>/webclap-spec (called "spec").
+# Facts only from reading code or docs. Behavior is described, not copied. Reimplement from understanding.
+
+meta:
+  repos:
+    host:
+      url: https://github.com/WebCLAP/browser-test-host
+      clone_commit: b42ade615bef2c989f96400a7b0b2ef15cabd396
+      license:
+        value: NOT STATED in the clone
+        src: [host (no LICENSE file at the root, README.md has no licence section)]
+        note: "Treat as all rights reserved until an owner statement is found. Read for ideas only. Its sources carry the Signalsmith Audio name (clap-audionode/host-dev/source/hosted-wclap.h:199-201)."
+      size: "Small: about 1800 lines of JS and C++ plus a prebuilt 3 MB host.wasm. Three git submodules are NOT in the shallow clone: wclap-js, cbor-walker, examples."
+      src_submodules: .gitmodules:1-9
+    spec:
+      url: https://github.com/free-audio/web-clap
+      clone_commit: 29853a41d8ae344793e9b161a8fdbf5fa9a6cbba
+      license:
+        value: MIT
+        src: [spec/LICENSE:1-3]
+      size: "One README of about 100 lines (a goals and design sketch) plus a stub Rust crate in bridge/. Not a normative spec."
+      src_stub: [spec/README.md:1-103, spec/bridge/src/main.rs]
+  more_repos:
+    wclap_js:
+      note: "Called wjs in src paths: <reference checkout>/wclap-js. Shallow clone of https://github.com/WebCLAP/wclap-js, HEAD 75792ade475b88ce85694a3725d8da86d2765394 (read from the clone ref file, T02b)."
+      license:
+        value: NOT STATED in the clone
+        src: [wjs (no LICENSE file at the root, wjs/README.md has no licence section)]
+        note: "Treat as all rights reserved, read for behavior only. It vendors a minified MIT tar reader (wjs/es6/targz.mjs:15-22), which does not change the status of the rest."
+      size: "About 650 lines of JS plus 330 lines of C++ glue. The WASI shim (submodule es6/wasi) is NOT in the clone, see wjs/.gitmodules:1-6."
+    wclap_cpp:
+      note: "Called wcpp in src paths: <reference checkout>/wclap-cpp. Shallow clone of https://github.com/geraintluff/wclap-cpp, HEAD 938641adf740ed67e1f44457e37d172fced8f106."
+      license:
+        value: MIT (copyright 2025 Geraint Luff, Alexandre Bique and other CLAP contributors)
+        src: [wcpp/LICENSE.txt:1-3]
+      size: "Header only C++ helpers. wclap-generic.hpp (1271 lines) is generated from the CLAP headers by wcpp/dev/update.js."
+    clap:
+      note: "Called clap in src paths: <reference checkout>/clap. Shallow clone of https://github.com/free-audio/clap, HEAD a47f6badb49d948fd009998f28309cdab78979c9, header version 1.2.10 (clap/include/clap/version.h:23-25). Host side facts are in notes/ref-clap-host.yaml."
+      license:
+        value: MIT
+        src: [clap/LICENSE:1-3]
+  coverage_gap: "CLOSED by T02b for the loader: wclap-js and wclap-cpp are now read (sections plugin_memory_import_sizing, plugin_threads_in_loader, loader_quirks). Still missing: the WASI shim submodule (wasi.wasm) and the prebuilt host.wasm sources outside the test host."
+  status_read: "Experimental. The spec repo says what it wants, not what exists. The only concrete host in the clone is a test host by one author (see readiness)."
+
+how_a_wclap_loads:
+  summary: "A WCLAP is a bundle (directory or tar.gz) with a mandatory module.wasm, plus optional factory data, presets and web GUI files. A 'host.wasm' (C++ compiled to WASM, reactor model) is the CLAP host brain. It does not contain the plugin. The JS loader instantiates BOTH the host.wasm and the plugin module.wasm, and the C++ host drives the plugin through functions it registers into the plugin's table. So there are two WASM instances per audio node: host and plugin."
+  src: [spec/README.md:82-103, host/README.md:7-23, host/clap-audionode/host-dev/source/host.cpp:8-86, host/clap-audionode/host-dev/CMakeLists.txt:14]
+  bundle:
+    what: "Directory with module.wasm required. Over the web the URL should resolve to a .tar.gz so a host can prefetch everything and serve it to the plugin through fake URLs via a service worker."
+    src: spec/README.md:82-103
+    tags: [borrow]
+  load_sequence:
+    - "Main thread: ClapAudioNode constructor fetches host.wasm config once (static, shared across nodes) and fetches/unpacks the plugin bundle (getWclap), both async."
+    - "Main thread: startHost instantiates host.wasm; startWclap instantiates module.wasm; the C++ side wraps that plugin instance in a HostedWclap."
+    - "Hosted wclap setup: registers every host callback into the plugin's function table BEFORE the instance is locked, writes a host struct, calls clap_entry init, asks for the plugin factory, fails if either is missing. 64-bit WCLAP is refused."
+    - "plugins(): a throwaway second instance is started just to list descriptors, then removed."
+    - "createNode(): adds one AudioWorklet module per AudioContext, then builds an AudioWorkletNode and passes the host and wclap init data as processorOptions. Inside the worklet the whole load happens AGAIN (a third and fourth instance in the audio thread), so the main-thread instance is only for metadata."
+    - "Plugin start in the worklet: create plugin by id, activate with sample rate, min and max frames, start_processing, then build ONE reusable process struct in plugin memory and return the addresses of all channel buffers to JS."
+  src_sequence: [host/clap-audionode/clap-audionode.mjs:13-98, host/clap-audionode/clap-audioworkletprocessor.mjs:75-168, host/clap-audionode/host-dev/source/hosted-wclap.h:184-290, host/clap-audionode/host-dev/source/hosted-plugin.h:294-390]
+  tags: [borrow]
+  host_extensions_offered: "audio-ports, gui, latency, log, note-ports, params, state, tail, and a draft 'webview' extension (clap.webview/3) used for plugin GUIs. Other extension requests are refused with a console message."
+  src_ext: host/clap-audionode/host-dev/source/hosted-wclap.h:43-60
+  host_identity: "Host presents itself to the plugin with a name, vendor and clap version triple 1.2.7."
+  src_identity: host/clap-audionode/host-dev/source/hosted-wclap.h:197-202
+
+memory_and_thread_model:
+  plugin_memory:
+    fact: "Each plugin is a 32-bit WASM instance with its OWN linear memory. Host code never shares pointers with it. Everything crossing is copied into or out of that memory by address (host event bytes are copied into a scoped arena in plugin memory; state bytes go through stream callbacks)."
+    src: [host/clap-audionode/host-dev/source/hosted-wclap.h:191, host/clap-audionode/host-dev/source/hosted-plugin.h:87-102, host/clap-audionode/host-dev/source/hosted-plugin.h:123-138]
+    tags: [borrow]
+  arena_scoping:
+    fact: "Host allocates temporary structures inside plugin memory with a scoped arena that is rewound after each call, and 'commit' keeps allocations for the plugin lifetime. The audio thread has its own arena reserved at plugin start so no allocation of arenas happens per block."
+    src: [host/clap-audionode/host-dev/source/hosted-wclap.h:195-254, host/clap-audionode/host-dev/source/hosted-plugin.h:145, host/clap-audionode/host-dev/source/hosted-plugin.h:316-367]
+    tags: [borrow]
+  host_memory_cap:
+    fact: "host.wasm links with a hard maximum of 2 GiB and a growable function table. That caps the host side only; the plugin memory limit is set by the module itself."
+    src: host/clap-audionode/host-dev/CMakeLists.txt:14
+    tags: [rethink]
+  threads:
+    fact: "Host is built with the wasi pthread toolchain. If a plugin spawns threads, the loader sends a 'thread-worker' message to the MAIN thread, which starts a module Worker per thread (named by instance and thread id) that runs the same wasm over shared memory. AudioWorklet cannot create Workers, which is why the main thread must broker it. Without this, the instance is treated as single-threaded."
+    src: [host/clap-audionode/host-imports.mjs:27-50, host/clap-audionode/clap-audioworkletprocessor.mjs:123-126, host/clap-audionode/clap-audionode.mjs:129-132, host/clap-audionode/host-dev/Makefile:6]
+    consequence: "Plugin threads need SharedArrayBuffer, so the page must be cross-origin isolated. The test server sends COOP same-origin and COEP credentialless."
+    src_isolation: host/server.py:6-9
+    tags: [rethink]
+  main_thread_callbacks:
+    fact: "CLAP's on_main_thread is emulated: when a plugin asks for a callback a flag is set, and the worklet itself calls the plugin's main-thread entry right after each process call and after each remote method call, but only when the flag says it was requested. There is no real main thread for the plugin, it runs in the audio thread."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:172-177, host/clap-audionode/host-dev/source/hosted-plugin.h:444-446, host/clap-audionode/clap-audioworkletprocessor.mjs:206-208, host/clap-audionode/clap-audioworkletprocessor.mjs:319]
+    risk: "Plugin work that CLAP expects off the audio thread (state save, GUI work, heavy init in main-thread callbacks) runs inline in the audio callback. A slow plugin can glitch the whole context."
+    tags: [avoid]
+  timing_probe:
+    fact: "Optional worker spins writing performance.now into a shared 8 byte buffer so the worklet can time itself, because the worklet has a coarse clock. The probe reads it as a 32-bit float where a double is written (looks like a bug)."
+    src: [host/clap-audionode/clap-audionode.mjs:35-46, host/clap-audionode/clap-audioworkletprocessor.mjs:16-21]
+    tags: [rethink]
+
+audio_and_parameters_across_the_boundary:
+  audio_path:
+    fact: "Per block, the worklet copies input channels from the Web Audio buffers directly into the plugin's own float buffers (addresses learned at start, cached), calls process once with the block length, then copies output channels back. No host.wasm copy in between. Channel count mismatch is handled by modulo cycling of input channels. Missing input is zeroed."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:291-342]
+    tags: [borrow]
+  block_size:
+    fact: "Max frames is fixed at 128 (the Web Audio render quantum). Min frames is 1. Process receives the real length of the Web Audio block each call."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:26, host/clap-audionode/clap-audioworkletprocessor.mjs:156, host/clap-audionode/clap-audioworkletprocessor.mjs:295]
+    tags: [borrow]
+  views_are_recreated_per_block: "A new Float32Array view over the plugin memory is created per channel per block. This allocates in the audio thread and breaks if the plugin memory grows (the old buffer detaches)."
+  src_views: host/clap-audionode/clap-audioworkletprocessor.mjs:300-304
+  views_tags: [avoid]
+  return_values:
+    fact: "Process status is mapped to a worklet keep-alive boolean: error stops the node; continue-if-not-quiet checks output energy against a fixed small threshold; tail is not supported; sleep continues only while input exists."
+    src: host/clap-audionode/clap-audioworkletprocessor.mjs:351-368
+    tags: [borrow]
+    note: "The energy threshold is hardcoded. For us it must come from env or config."
+  events_in:
+    fact: "Everything that is not audio is an event queue. JS side appends event bytes; at process start the host copies pending events into plugin memory, stable-sorts them by timestamp, and exposes them through CLAP's input events interface. The queue is guarded by a recursive mutex (only matters with plugin threads)."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:63-114, host/clap-audionode/host-dev/source/hosted-plugin.h:396-417]
+    tags: [borrow]
+    quirk: "The copy loop drains from the LAST pending index to the first, so events with equal timestamps come out reversed relative to arrival order. A stable sort cannot fix that. Verify before trusting same-time ordering (note-off then note-on)."
+    src_quirk: [host/clap-audionode/host-dev/source/hosted-plugin.h:399-402]
+    tags_quirk: [avoid]
+  events_between_plugins:
+    fact: "Plugin output events are pushed by name into a global routing table keyed by node id, then pulled by connected nodes at their next process. Only note and MIDI event kinds are forwarded between plugins, because other event kinds hold plugin-specific ids or 32/64 bit pointers."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:144-149, host/clap-audionode/clap-audioworkletprocessor.mjs:210-226, host/clap-audionode/host-dev/source/hosted-plugin.h:72-81]
+    limit: "The routing table is a module global inside the worklet scope, so it only links nodes of one AudioContext. Latency is one render quantum or more, not sample accurate across plugins."
+    tags: [rethink]
+  parameters:
+    set: "setParam from the main thread is a message to the worklet (promise based RPC with request ids). The worklet turns it into a live param-value event with time zero, queues it, and immediately runs the plugin's params flush so the value takes effect and can be read back in the same call."
+    get: "A param query reads value and a display text string from the plugin; getParams enumerates id, flags, name, module path, min, max, default, then adds each current value."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:258-274, host/clap-audionode/host-dev/source/hosted-plugin.h:205-293, host/clap-audionode/host-dev/source/hosted-plugin.h:422-436]
+    limits:
+      - "No sample accurate automation API in the test host: values land at time zero of the next block. Our engine can send timestamped param events through the same event path."
+      - "Param gestures begin and end are handled in flush only."
+      - "No param change notifications reach JS except a 'rescan' message (flags only) and 'state dirty'."
+    tags: [borrow, rethink]
+  rpc_pattern:
+    fact: "Main thread proxies a fixed list of method names (pause, resume, connect events, save and load state, set and get params, performance, get resource, webview open) onto the node, each call a message with an id and a promise. The worklet answers on its port. Errors make the node fatal."
+    src: [host/clap-audionode/clap-audionode.mjs:107-119, host/clap-audionode/clap-audioworkletprocessor.mjs:170-196, host/clap-audionode/clap-audioworkletprocessor.mjs:232-285]
+    tags: [borrow]
+  state:
+    fact: "Save and load go through CLAP stream callbacks implemented by the host as a plain growable byte buffer, then returned to JS as bytes. The test page can restore state from a base64 URL parameter."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:506-525, host/index.html:349-360]
+    note: "The save call returns bytes by copying, noted as a TODO in code (allocation and GC pressure)."
+    tags: [borrow]
+  cbor_for_metadata: "Structured results (plugin descriptors, params, port pointers, resources) go from C++ to JS as CBOR in a shared byte buffer, decoded on the JS side after a copy (shared buffers cannot be decoded by TextDecoder). Audio never uses it."
+  src_cbor: [host/clap-audionode/clap-audioworkletprocessor.mjs:51-57, host/clap-audionode/host-dev/source/host.cpp:23-85]
+  cbor_tags: [borrow]
+
+sandbox_what_a_plugin_can_and_cannot_do:
+  summary: "The sandbox is the WASM sandbox itself: no ambient syscalls, only the functions the host places in the plugin's imports. In the test host that is a very small WASI subset plus the CLAP host callbacks."
+  wasi_surface: "The WASI shim defines all functions of the 32-bit preview1 interface but actually implements only logging and random numbers. No filesystem, clock-based sleep, sockets or env."
+  src_wasi: host/README.md:23
+  file_access: "A plugin reads its own bundle files through host-provided resource fetch (webview get_resource), not a filesystem. The spec sketch says the host must tell the plugin where factory data, presets, cache and var directories live, and that permission management (filesystem, network, hardware) is planned."
+  src_files: [host/clap-audionode/clap-audionode.mjs:121-124, host/clap-audionode/host-dev/source/hosted-plugin.h:527-553, spec/README.md:23-47]
+  gui: "Plugin UI is a web page inside an iframe. Messages between UI and plugin are raw ArrayBuffers relayed through the node port. The plugin cannot touch the page DOM or main-thread APIs. The page decides what resources the iframe sees via a service-worker prefix."
+  src_gui: [host/clap-audionode/clap-audionode.mjs:159-220, host/page-proxy-service-worker.js:1-30]
+  cannot:
+    - "Use native VST3, AU or CLAP binaries (not WASM)."
+    - "Create threads itself without the main thread brokering workers."
+    - "Reach the network or disk unless the host adds imports for it (none in the test host)."
+    - "Use 64-bit WASM (refused at load)."
+    - "Call clap.log with useful effect inside the worklet: the log callback in the stock imports only prints a warning that logging is ineffective, and the worklet override can only print on the console."
+  src_cannot: [host/clap-audionode/host-dev/source/hosted-wclap.h:191, host/clap-audionode/host-imports.mjs:19-22, host/clap-audionode/clap-audioworkletprocessor.mjs:106-115]
+  trust_gap: "Nothing limits CPU use or memory growth of a plugin. A plugin that spins forever blocks the audio thread. A loop timer exists only for statistics. Isolation from other plugins is by separate instances, but the shared routing table allows plugin to plugin event traffic."
+  tags: [rethink]
+
+limits_and_costs:
+  - fact: "Four WASM instances (host and plugin, main thread and worklet) per node: memory cost is multiplied by the number of nodes because the host comment says a shared host across modules was deliberately not done."
+    src: [host/clap-audionode/clap-audionode.mjs:23, host/clap-audionode/clap-audioworkletprocessor.mjs:85-86]
+    tags: [rethink]
+  - fact: "Render quantum is 128 frames. At 48 kHz that is about 2.7 ms per call. Every plugin crossing adds a JS to WASM to JS bounce and copies per block."
+    src: host/clap-audionode/clap-audioworkletprocessor.mjs:26
+    tags: [rethink]
+  - fact: "No offline render path in the host: process is driven by the AudioContext only. An offline bounce needs a different driver loop (OfflineAudioContext or direct calls into the same wasm)."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:291-369]
+    tags: [rethink]
+  - fact: "Only stereo style single input and output port is configured by default (numberOfInputs 1, outputChannelCount 2). Multi-port plugins are copied by port index but not demonstrated."
+    src: [host/clap-audionode/clap-audionode.mjs:79-83, host/clap-audionode/clap-audioworkletprocessor.mjs:300-340]
+    tags: [rethink]
+  - fact: "Plugin loads by cross-origin URL, so the plugin host must serve CORS headers and, when threads are used, COEP compatible headers."
+    src: [host/README.md:3, host/server.py:6-9]
+    tags: [rethink]
+
+readiness_and_risks_for_us:
+  readiness: "Proof of concept, one maintainer, no tests in the clone, no licence file, core loader in an uncloned submodule, spec repo is a design sketch. openDAW also hosts WCLAP (see ref-opendaw.yaml, web-limits.yaml), which is the stronger real-world data point."
+  risks:
+    - "Licence unclear on the test host. Do not copy. The spec repo is MIT but contains almost no code."
+    - "Plugin ecosystem is tiny: examples come from a few authors. Budget for built-in instruments and effects first."
+    - "Main-thread work in the audio thread, no CPU budget enforcement, no memory cap: one bad plugin can break playback. We need a per plugin watchdog and a way to bypass a node that overruns."
+    - "Safari AudioWorklet plus shared memory is uncertain (see web-limits.yaml)."
+    - "Standard is moving: the webview extension is a draft and the host announces clap version 1.2.7."
+  decision_hint: "Plugin hosting is a tier0 optional feature behind an adapter. Our command API and render engine must not depend on it."
+
+module_contract:
+  fact: "A web plugin module must export an integer entry symbol that stands for the CLAP entry struct address, export an allocator, and either import one memory (must be shared) or export its own. If it does both, the host ignores the exported one. The host should check the integer width of the entry and the allocator signature rather than assume 32 bit. Bundle layout: module.wasm at the top of the directory or tarball."
+  src: [wcpp/README.md:5-13]
+  tags: [borrow]
+  loader_extra_requirements:
+    - "Exactly one imported memory at most, else load fails. Zero imported memories means the module exports its own."
+    - "The module must export exactly one function table that ends in a function entry, else load fails. The host later grows this table to add its own callbacks."
+    - "A module that imports a WASI namespace gets a WASI shim bound to its memory plus the bundle files preloaded into the shim."
+  src_extra: [wjs/es6/wclap-plugin.mjs:20-23, wjs/es6/wclap.mjs:290-332]
+  tags_extra: [borrow]
+
+plugin_memory_import_sizing:
+  summary: "How big the plugin memory is allowed to be, from the loader code (T02b)."
+  declaration_is_read_from_the_binary:
+    fact: "After compile, the loader walks the raw wasm bytes to the import section and reads the limits (initial pages, optional maximum, shared flag) of the one imported memory. This is needed because the JS API does not expose the limits of an import. Only 32-bit limit flags are accepted (bit 0 has maximum, bit 1 shared); anything else is rejected as unsupported. Other import kinds are skipped by their shape."
+    src: [wjs/es6/wasm-memory.mjs:1-69]
+    tags: [borrow]
+  rule:
+    fact: "Effective maximum is the smaller of the module's declared maximum (if any) and a host ceiling. The host ceiling is an option given in 64 KiB pages, default 32768 pages (2 GiB). The initial size is exactly the module's declared minimum. If that minimum is above the effective maximum, the load is rejected with a range error before any instance exists."
+    src: [wjs/README.md:21-35, wjs/es6/wclap-plugin.mjs:13-34]
+    tags: [borrow]
+    we_call_it: "memory ceiling (pages), per plugin load option"
+  why_it_matters:
+    - "A module that declares no maximum gets the full ceiling, so the default hands every such plugin 2 GiB of address space. The README says lower declared maxima are honoured so mobile browsers (iOS named) cope. Our default ceiling must be much lower and come from config, with the rejection as the failure path surfaced to the user."
+    - "The host memory (the C++ host module, not the plugin) is created separately with initial 2 pages, maximum 32768 pages, shared, when it imports memory. That is a different fixed number from the plugin ceiling."
+  src_host_memory: [wjs/es6/wclap.mjs:232-246]
+  sharing:
+    fact: "The plugin memory object is created up front on the main thread only when the page is cross-origin isolated AND the module declares the memory shared. That object is stored in the init data so it can be handed to an AudioWorklet or Worker. If the context is not isolated or the memory is not shared, the memory is created later inside whichever context instantiates the plugin, and is private to it. Instantiating in a context that was told memory is shared but received none is an error."
+    src: [wjs/es6/wclap-plugin.mjs:29-33, wjs/es6/wclap.mjs:288-300, wjs/es6/wclap.mjs:361]
+    comment_in_code: "Only shared memory can be passed between the main thread and an AudioWorklet, which is the reason for creating it early."
+    tags: [borrow]
+  gaps:
+    - "Nothing grows or shrinks memory by policy: the plugin grows itself up to its maximum. No accounting per plugin."
+    - "Whether a browser allows a shared 2 GiB maximum at all is browser dependent. Not read here (see unverified)."
+  tags: [rethink]
+
+plugin_threads_in_loader:
+  summary: "Plugin threads use the wasi-threads convention: the plugin imports a thread-spawn function and exports a thread-start entry. The loader turns that into real Workers, because only a Worker or the host's own native-style thread can run wasm code concurrently."
+  chain:
+    - "Plugin calls its imported thread-spawn with one argument. The loader remembers which plugin instance asked (a single slot, set just before the call and cleared inside the next step) and calls the host module's start-thread export."
+    - "The host module starts a detached native thread (compiled to a Worker by the host toolchain). That thread's spawn reaches the loader's host side thread-spawn import, which allocates a global thread id and finds the remembered instance."
+    - "The loader calls the createWorker callback given for that instance with a small clone-safe record (instance handle, thread id, thread context, table of registered host callbacks) and needs a truthy return synchronously. Falsy or missing callback means the spawn fails and returns -1 to the plugin."
+    - "The page builds the worker data by asking the host object for it. This requires cross-origin isolation and a shared plugin memory, otherwise it throws or returns -1."
+    - "In the new Worker, the entry function starts a host module instance on the same shared host memory, attaches to the same plugin instance and memory without re-initialising, re-installs the callbacks, then calls the host module's thread-start export, which in turn calls the plugin's thread-start export with the thread id and context."
+  src: [wjs/es6/wclap.mjs:19-84, wjs/es6/wclap.mjs:101-107, wjs/es6/wclap.mjs:255-257, wjs/es6/wclap.mjs:317-319, wjs/cpp/wclap-js-instance.cpp:25-45, wjs/README.md:59-65]
+  tags: [borrow]
+  limits:
+    - fact: "Thread ids are a lifetime counter, capped at 2^29, then spawn fails with -1. A thread slot is never reused."
+      src: [wjs/cpp/wclap-js-instance.cpp:25-33, wjs/cpp/wclap-js-instance.h:153-161]
+    - fact: "A thread started by one plugin instance can only call into that instance. No cross-instance calls from plugin threads."
+      src: [wcpp/README.md:37]
+    - fact: "Destroying an instance with running or pending threads only prints a warning, it does not join or kill them. Teardown order is our problem."
+      src: [wjs/cpp/wclap-js-instance.h:137-142]
+      tags: [avoid]
+    - fact: "The worker callback is documented to work from an AudioWorklet because the data passed is minimal, so the page (not the worklet) creates the Worker. The synchronous truthy return means 'request accepted', the thread may start later. A plugin that spins waiting for its helper thread inside process can stall the audio quantum."
+      src: [wjs/README.md:59-65]
+      tags: [rethink]
+  for_us: "Support single threaded web plugins first (W07). If we add threads, copy the shape (id counter, clone safe spawn record, page side worker creation) but add a per plugin thread cap, join on destroy, and a flag that marks a plugin as thread-using so the render engine can refuse to run it offline in a context without workers."
+  tags_for_us: [rethink]
+
+wasm_host_bridge_design:
+  fact: "wclap-cpp separates the CLAP-aware host code from the wasm engine. Plugin structures are re-declared with pointers and function pointers replaced by plain integer wrapper types (so a struct can be copied byte for byte out of plugin memory), and a small instance interface supplies: allocate in plugin memory, read and write arrays at plugin addresses, count items until a terminator, call a plugin function by table index or by pointer-to-function-pointer, and register a host callback that appears to the plugin as a table index. Host callbacks can only be registered before the plugin is initialised, and each instance gets its own indices."
+  src: [wcpp/README.md:17-37, wcpp/include/wclap/instance.hpp:8-129, wcpp/include/wclap/wclap.hpp:12-55, wjs/cpp/wclap-js-instance.h:129-221, wjs/es6/wclap.mjs:109-140]
+  tags: [borrow]
+  call_convention: "Calls cross as a tagged argument array (32 bit int, 64 bit int, float, double, 16 bytes per slot) and a tagged result slot. The loader reads tags, spreads args into a plain function-table call."
+  src_call: [wjs/es6/wclap.mjs:160-209, wjs/cpp/wclap-js-instance.h:53-106]
+  host_callback_trick: "To make a host function look like a plugin table entry, the loader generates a tiny forwarding wasm module on the fly from the signature string, synchronously compiles it, and puts its exports into the plugin's function table (growing the table as needed). Signature letters map to 32 bit int, 64 bit int, float, double, void."
+  src_trick: [wjs/es6/wclap.mjs:371-395, wjs/es6/generate-forwarding-wasm.mjs:1-83, wjs/cpp/wclap-js-instance.h:108-127]
+  trust_boundary: "Handles that come back from the plugin (host_data style fields) should not be raw pointers. A lookup table maps 32 bit indices to objects, returning null for stale or invalid indices, with a shared lock for reads."
+  src_trust: [wcpp/include/wclap/index-lookup.hpp:1-43]
+  scratch_memory: "Temporary structs the host writes into plugin memory come from pooled arenas (16 KiB default each, allocated inside the plugin through its own allocator), handed out under a scoped guard that rewinds on exit. A 'commit' keeps the allocation by releasing the arena from the pool. Running out of an arena returns a null pointer (marked TODO to grow), so large event lists in one block can silently fail."
+  src_arena: [wcpp/include/wclap/memory-arena.hpp:14-152]
+  tags_arena: [borrow, avoid]
+  for_us: "Our plugin host should keep the same split: a CLAP-aware core written against a small 'plugin instance' interface, with a native implementation (T24) and a wasm one later. The same core logic then serves both. Do not copy the wrapper type names or the generated header."
+  tags_for_us: [borrow]
+
+loader_quirks:
+  note: "Things that look wrong or fragile in the loader. Verify before relying on either direction."
+  items:
+    - fact: "The 64-bit detection tests whether the exported entry symbol is an instance of BigInt. A wasm export is a Global object or primitive, so this test appears never to be true; 64-bit modules would be treated as 32-bit and then mis-read. The branch is moot because 64-bit init throws anyway."
+      src: [wjs/es6/wclap.mjs:334, wjs/es6/wclap.mjs:225, wjs/es6/wclap.mjs:349]
+      tags: [avoid]
+    - fact: "Result conversion for 64-bit return values uses the same instanceof BigInt test, so 64-bit results would fall to the error branch. Only 32-bit results and doubles are exercised."
+      src: [wjs/es6/wclap.mjs:200-208]
+      tags: [avoid]
+    - fact: "The 'precompiled module' path requires the caller to supply the memory declaration, otherwise it throws. Re-parsing is skipped on purpose when re-instantiating the same module in the worklet. Also each re-use gets a fresh path suffix so file paths do not collide between copies."
+      src: [wjs/es6/wclap-plugin.mjs:23, wjs/es6/wclap-plugin.mjs:36-41]
+      tags: [borrow]
+    - fact: "Bundle fetch decides by response content type: wasm content type means a bare module, anything else is assumed to be a gzip tarball. Leading dot-slash is stripped from entries. If module.wasm is not at the root, the first match anywhere in the tree is used with an error message. The tar reader is a vendored minified file."
+      src: [wjs/es6/wclap-plugin.mjs:64-97, wjs/es6/targz.mjs:1-14]
+      tags: [rethink]
+    - fact: "Plugin file paths are a hash (32 bit FNV-1a of the URL, a non-cryptographic hash) under a plugin path prefix. Collisions between two plugins with different URLs are possible in principle."
+      src: [wjs/es6/wclap-plugin.mjs:4-16]
+      tags: [avoid]
+    - fact: "Worklet scopes lack the text codec, so the loader installs a slow fallback that goes through byte strings."
+      src: [wjs/es6/wclap.mjs:415-437]
+      tags: [borrow]
+    - fact: "After startup, the instance start sequence runs the module's optional initialise export (reactor style) BEFORE the entry is returned, but after host callbacks are in the table. The entry's own init is then called by the C++ side."
+      src: [wjs/es6/wclap.mjs:128-140]
+      tags: [borrow]
+
+event_ordering_check:
+  fact: "Re-checked in the test host. Pending events are copied into the plugin by popping from the end of the pending list, then sorted with a stable sort by time. The stable sort preserves the already reversed order, so events with the same time reach the plugin in reverse arrival order. The params-only flush path loops from the last index to the first as well, same effect."
+  src: [host/clap-audionode/host-dev/source/hosted-plugin.h:399-402, host/clap-audionode/host-dev/source/hosted-plugin.h:427-433, host/clap-audionode/host-dev/source/hosted-plugin.h:103-108]
+  why_it_hurts: "The CLAP header says a note expression sent at the same sample as its note on applies to the whole voice, and its own example sequences show same-time events in submission order. Reversed order would deliver the expression before the note on (voice not yet created) and a note off before a note on at the same tick."
+  src_spec: [clap/include/clap/events.h:78-84, clap/include/clap/events.h:182-186]
+  spec_gap: "The header only requires events sorted by sample time and does not name a tie-break for equal times. A host should define one: arrival order within one source, and a fixed priority across kinds if needed."
+  src_spec_gap: [clap/include/clap/process.h:56-58, clap/include/clap/events.h:344-345]
+  tags: [avoid]
+  rule_for_us: "Our event queue sorts by (time, arrival sequence number). Test: note off then note on at one tick must deliver off first; note on then expression at one tick must deliver on first."
+
+clap_abi_layout_32bit:
+  note: "W01: byte offsets of the 32-bit CLAP structs our host reads and writes, from the MIT headers (clap = <reference checkout>/clap/include/clap). Exercised by web/app/tests/wclap.test.ts through a generated plugin."
+  entry: {init: 12, deinit: 16, get_factory: 20, src: "clap/entry.h"}
+  factory: {get_plugin_count: 0, get_plugin_descriptor: 4, create_plugin: 8, src: "clap/factory/plugin-factory.h"}
+  descriptor: {id: 12, name: 16, src: "clap/plugin.h"}
+  plugin: {desc: 0, plugin_data: 4, init: 8, destroy: 12, activate: 16, deactivate: 20, start_processing: 24, stop_processing: 28, reset: 32, process: 36, get_extension: 40, on_main_thread: 44, src: "clap/plugin.h:41-110"}
+  host: {host_data: 12, name: 16, vendor: 20, url: 24, version: 28, get_extension: 32, request_restart: 36, request_process: 40, request_callback: 44, size: 48, src: "clap/host.h"}
+  process: {steady_time: 0, frames_count: 8, transport: 12, audio_inputs: 16, audio_outputs: 20, inputs_count: 24, outputs_count: 28, in_events: 32, out_events: 36, size: 40, src: "clap/process.h:30-62"}
+  audio_buffer: {data32: 0, data64: 4, channel_count: 8, latency: 12, constant_mask: 16, size: 24, src: "clap/audio-buffer.h:26-33"}
+  event_header: {size: 0, time: 4, space_id: 8, type: 10, flags: 12, total: 16, src: "clap/events.h:18-24"}
+  param_value_event: {param_id: 16, cookie: 20, note_id: 24, port_index: 28, channel: 30, key: 32, value_f64: 40, size: 48, type_id: 5, src: "clap/events.h:222-237"}
+  event_lists: {input: "size fn at 4, get fn at 8", output: "try_push fn at 4", src: "clap/events.h:345-363"}
+  param_info: {id: 0, flags: 4, cookie: 8, name: 12, module: 268, min: 1296, max: 1304, default: 1312, size: 1320, src: "clap/ext/params.h:211-256, clap/string-sizes.h"}
+  plugin_params: {count: 0, get_info: 4, get_value: 8, value_to_text: 12, text_to_value: 16, flush: 20}
+worklet_scope_facts:
+  - fact: "AudioWorkletGlobalScope in Chrome has no TextEncoder or TextDecoder (found when the e2e failed with 'TextEncoder is not defined'). Matches the loader quirk about a text fallback."
+    src: "web/app/e2e/wclap.mjs, web/app/src/audio/wclap/inspect.ts bytesToText"
+    tags: [borrow]
+  - fact: "A JS function can be put into a wasm table slot by importing it into a tiny generated module and re-exporting it; a worklet can compile such a module synchronously."
+    src: "web/app/src/audio/wclap/hostFn.ts"
+
+we_call_it:
+  - their: WCLAP (web CLAP)
+    ours: web plugin
+  - their: host.wasm (C++ CLAP host in WASM)
+    ours: plugin host module
+  - their: ClapAudioNode
+    ours: plugin node (one AudioWorkletNode per plugin instance)
+  - their: AudioWorkletProcessor wrapper
+    ours: plugin audio runner
+  - their: hosted wclap, hosted plugin
+    ours: plugin module handle, plugin instance
+  - their: clap.params flush with param value events
+    ours: parameter event (timestamped, applied at block start)
+  - their: clapRouting table
+    ours: note bus (cross plugin event routing)
+  - their: webview extension
+    ours: plugin panel
+  - their: bundle (.wclap, .wclap.tar.gz)
+    ours: plugin bundle
+  - their: getWclap options, maximumMemoryPages
+    ours: plugin load options, memory ceiling
+  - their: createWorker callback, thread data
+    ours: plugin thread broker, thread spawn record
+  - their: Instance (wclap-cpp)
+    ours: plugin instance interface
+  - their: memory arena, scoped arena
+    ours: plugin scratch space
+  - their: IndexLookup
+    ours: handle table
+
+lessons:
+  - id: W01
+    tag: borrow
+    lesson: "Keep the plugin's audio buffers inside its own memory, learn their addresses once at start, and copy Web Audio blocks straight in and out per quantum. Never route audio through a second host memory."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:291-342, host/clap-audionode/host-dev/source/hosted-plugin.h:294-390]
+  - id: W02
+    tag: borrow
+    lesson: "Treat all non-audio plugin input as timestamped events in one queue, sorted before each block. Parameter changes, MIDI and transport all use it, which makes our command API and the plugin path the same shape."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:63-114]
+  - id: W03
+    tag: avoid
+    lesson: "Do not create typed array views over plugin memory per block inside the audio callback, and do not cache them across calls without a detach check: memory growth detaches them. Re-validate the buffer identity once per block or forbid memory growth after start."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:300-340]
+  - id: W04
+    tag: avoid
+    lesson: "Do not run CLAP main-thread work inline in the audio callback without a time budget. Queue it and run it from a worker or between blocks when the plugin allows, and measure."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:172-177, host/clap-audionode/clap-audioworkletprocessor.mjs:319]
+  - id: W05
+    tag: borrow
+    lesson: "Use a small fixed RPC surface from UI to audio node (message with request id and a promise). The same surface becomes our plugin side of the command API and can be driven by a script or an AI."
+    src: [host/clap-audionode/clap-audionode.mjs:107-119, host/clap-audionode/clap-audioworkletprocessor.mjs:232-285]
+  - id: W06
+    tag: rethink
+    lesson: "One host instance per node multiplies memory. Decide host sharing per origin from the first measurement (plugin count vs memory) instead of copying this default."
+    src: [host/clap-audionode/clap-audionode.mjs:23]
+  - id: W07
+    tag: rethink
+    lesson: "Plugin threads require cross-origin isolation and a main thread broker for workers. Ship single threaded plugins as the supported path, treat threaded plugins as best effort, serve COOP and COEP from day one."
+    src: [host/clap-audionode/host-imports.mjs:27-50, host/server.py:6-9]
+  - id: W08
+    tag: rethink
+    lesson: "Add what the test host lacks: CPU budget and watchdog per plugin node, memory cap, offline render path, sample accurate automation, multi-port routing. These are our work, not a free download."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:287-369]
+  - id: W09
+    tag: borrow
+    lesson: "Ship plugins as one fetched archive and serve its files through a service worker with fake URLs so the plugin GUI and data resolve normally. Pair with a hash so we can cache and verify."
+    src: [spec/README.md:98-103, host/page-proxy-service-worker.js:1-30]
+  - id: W10
+    tag: avoid
+    lesson: "Hardcoded numbers (silence energy threshold, CPU averaging periods, 2 GiB max memory) must come from our config. Do not carry them over."
+    src: [host/clap-audionode/clap-audioworkletprocessor.mjs:14-15, host/clap-audionode/clap-audioworkletprocessor.mjs:354-361, host/clap-audionode/host-dev/CMakeLists.txt:14]
+  - id: W11
+    tag: avoid
+    lesson: "Do not pass event ordering for equal timestamps through a reverse drain. Keep arrival order as a tiebreaker in our own queue and test it with note off followed by note on at one tick."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:399-402]
+  - id: W12
+    tag: rethink
+    lesson: "Only forward note and MIDI events between plugin nodes. Any event with plugin ids or pointers needs translation. Our note bus must define its own neutral event type and convert at the edges."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:72-81]
+
+  - id: W13
+    tag: borrow
+    lesson: "Read the plugin's declared memory limits from the binary before instantiating, clamp the maximum to a configured ceiling, and reject with a clear error if the declared minimum is above it. Our ceiling default is far below 2 GiB and comes from config."
+    src: [wjs/es6/wasm-memory.mjs:1-69, wjs/es6/wclap-plugin.mjs:13-34]
+  - id: W14
+    tag: borrow
+    lesson: "Create the shared plugin memory on the main thread first and pass it to the audio worklet in the init data. A worklet cannot share memory it did not receive, and a non-isolated page falls back to private memory with no thread support."
+    src: [wjs/es6/wclap-plugin.mjs:29-33, wjs/es6/wclap.mjs:288-300]
+  - id: W15
+    tag: rethink
+    lesson: "Thread spawn is brokered by the page and accepted synchronously but started later. Add a cap, a join at destroy and a per plugin flag, and decide what offline render does for a threaded plugin."
+    src: [wjs/es6/wclap.mjs:19-84, wjs/cpp/wclap-js-instance.h:137-142]
+  - id: W16
+    tag: borrow
+    lesson: "Keep CLAP-aware logic behind a small plugin instance interface (alloc, read, write, call, register host callback) so native hosting (T24) and wasm hosting share one core."
+    src: [wcpp/include/wclap/instance.hpp:8-129, wcpp/README.md:25-37]
+  - id: W17
+    tag: avoid
+    lesson: "Do not use a bounded scratch arena that returns null on overflow without a growth path or an error to the caller. Size per block from the event count and fail loudly."
+    src: [wcpp/include/wclap/memory-arena.hpp:59-65]
+  - id: W18
+    tag: avoid
+    lesson: "Do not leave host restart and process requests as log-only no-ops. A host must act on them (restart means deactivate then activate again at a safe point). See notes/ref-clap-host.yaml."
+    src: [host/clap-audionode/host-dev/source/hosted-plugin.h:438-443, clap/include/clap/host.h:27-35]
+
+unverified:
+  - topic: WASI shim behavior
+    what: "Which WASI calls the shim really implements, and how bundle files are exposed to the plugin (wjs/es6/wclap.mjs:306-314 loads files into the shim). The shim is a submodule not in the clone."
+    next: "Clone https://github.com/WebCLAP/wasi.wasm if a decision depends on it."
+  - topic: shared memory ceilings per browser
+    what: "Whether browsers accept a shared memory with a 2 GiB (32768 page) maximum, or lower on Safari and mobile. Needs MDN or compatibility tables, not read here. The loader only clamps by its own option."
+  - topic: thread start latency
+    what: "Whether a Worker spawned from an AudioWorklet request starts fast enough for a plugin that waits for its helper inside process. No timing code in the clones."
+  - topic: shared memory without isolation
+    what: "wjs/es6/wclap.mjs:239 creates a shared host memory even when the page is not cross-origin isolated, and only keeps it in config when isolated. Not verified that this call succeeds in every browser outside isolation."
+  - topic: licence of the test host and wclap-js
+    what: "No licence file in either clone. Check the repo pages and the authors before any reuse. wclap-cpp and the CLAP headers are MIT."
+  - topic: webview extension status
+    what: "Header exists as a draft in the CLAP repo, id clap.webview/3 (clap/include/clap/ext/draft/webview.h:6). Still under draft, not part of the stable set."
+  - topic: official registry and permissions
+    what: "Spec README plans a registry and a permission manager. No code in any clone."
+  - topic: bridge to native hosts
+    what: "spec/bridge is a stub. The plan (wasmer based bridge, tauri webview GUI) has no implementation to read."
+  - topic: performance numbers
+    what: "No benchmarks in any clone. The performance() RPC only reports moving averages per node."

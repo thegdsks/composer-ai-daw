@@ -1,0 +1,1135 @@
+# Nothing in this catalogue is bundled in the repository. Packs are fetched by the user with sounds/fetch.sh and are gitignored.
+# Sound source catalogue (T13). Licences read on the pages in licence_url on 2026-11-23.
+# status: listed (source verified, nothing downloaded), fetched (downloaded by sounds/fetch.sh), wired (loads in the browser app).
+# Packs are never committed: sounds/packs is gitignored and sounds/fetch.sh refetches them with the sha256 in sounds/packs.tsv.
+# checksum of a pack entry is the sha256 of the downloaded archive. The extracted .sf2 hash is in sounds/packs.tsv.
+# kind builtin: voices generated in code by composer-engine (D29); checksum is the sha256 of the source file.
+# bundle yes: legally fine and small. maybe: fine but size or detail needs a check. no: do not ship.
+entries:
+  - id: freepats-upright-piano-kw
+    name: "FreePats Upright Piano KW"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 27 MiB, SFZ FLAC 32 MiB, small versions 2.9 to 6 MiB"
+    instruments: "upright piano (Kawai, home recording, bass notes looped)"
+    quality_note: "Not auditioned. Home recording with a Zoom H1, so expect room character and lower fidelity than studio grands. Good intimate piano for calm music."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0, small, no conditions."
+  - id: freepats-ydp-grand-piano
+    name: "FreePats YDP Grand Piano"
+    kind: soundfont
+    status: listed
+    url: "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html"
+    licence: "CC BY 3.0"
+    licence_url: "https://creativecommons.org/licenses/by/3.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "yes"
+    attribution_text: "Credit author and licence per the page: Yamaha Disklavier Pro samples by Zenph Studios (OLPC library), soundfont by Roberto, licence CC BY 3.0 with licence URL. Exact wording to be confirmed at bundling time."
+    approx_size: "SF2 36 MiB"
+    instruments: "grand piano (Disklavier)"
+    quality_note: "Not auditioned. Derived from OLPC multisamples, so provenance has one extra hop."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "Licence is fine with attribution but the sample chain (Zenph, OLPC) should be checked once more before shipping."
+  - id: salamander-grand-piano
+    name: "Salamander Grand Piano V3"
+    kind: sfz
+    status: listed
+    url: "https://sfzinstruments.github.io/pianos/salamander/"
+    licence: "CC BY 3.0"
+    licence_url: "https://creativecommons.org/licenses/by/3.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "yes"
+    attribution_text: "Alexander Holm, Salamander Grand Piano, CC BY 3.0 (the page names the author and licence but gives no fixed wording)."
+    approx_size: "SFZ FLAC 707 MiB, WAV 24-bit 1.18 GiB, WAV 16-bit 394 MiB, SF2 296 MiB"
+    instruments: "Yamaha C5 grand, 16 velocity layers"
+    quality_note: "Not auditioned. Widely used and a likely best free piano here, judged from specs only."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "Licence allows bundling with credit, but 400+ MiB is too heavy for a first-run bundle. Offer as an optional download pack."
+  - id: freepats-concert-harp
+    name: "FreePats Concert Harp"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/OrchestralStrings/harp.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 9.1 MiB, SFZ FLAC 4.8 MiB, small 2.5 to 4.9 MiB"
+    instruments: "concert harp, 2 velocity layers"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 and small."
+  - id: freepats-synth-pad-choir
+    name: "FreePats Synth Pad Choir"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-pad.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 12 MiB, SFZ FLAC 6.5 MiB"
+    instruments: "choir style synth pad"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 and small. Fills a choir-ish pad slot, not a real choir."
+  - id: freepats-sweep-pad
+    name: "FreePats Sweep Pad"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-pad.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 7.2 MiB, SFZ FLAC 2.9 MiB"
+    instruments: "sweep pad"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 and small."
+  - id: freepats-new-age
+    name: "FreePats New Age"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-pad.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 7.4 MiB, SFZ FLAC 4.3 MiB"
+    instruments: "new age pad"
+    quality_note: "Not auditioned. Name suggests an ambient fit."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 and small."
+  - id: freepats-synth-pad-bowed
+    name: "FreePats Synth Pad Bowed"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-pad.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 21 MiB, SFZ FLAC 11 MiB"
+    instruments: "bowed synth pad"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0, modest size."
+  - id: freepats-synth-strings
+    name: "FreePats Synth Strings 1 and 2"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-strings.html"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "#1 SF2 4.2 MiB; #2 SF2 7.4 MiB"
+    instruments: "synth string pads"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 and small."
+  - id: freepats-acoustic-drum-kit
+    name: "FreePats Acoustic Drum Kit"
+    kind: sfz
+    status: listed
+    url: "https://freepats.zenvoid.org/Percussion/acoustic-drum-kit.html"
+    licence: "CC BY 4.0"
+    licence_url: "https://creativecommons.org/licenses/by/4.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "yes"
+    attribution_text: "Credit the FreePats acoustic drum kit authors and CC BY 4.0 with licence link. Author names to be copied from the page at bundling time."
+    approx_size: "SF2 53 MiB, SFZ FLAC 157 MiB, Hydrogen kit 131 MiB"
+    instruments: "acoustic drum kit"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "Licence fine with credit. Size is mid range and the author line needs copying exactly."
+  - id: freepats-general-midi
+    name: "FreePats General MIDI set"
+    kind: soundfont
+    status: listed
+    url: "https://freepats.zenvoid.org/SoundSets/general-midi.html"
+    licence: "GPL 3 or later with a special exception; some samples under other GPL-compatible licences"
+    licence_url: "https://www.gnu.org/licenses/gpl-3.0.html"
+    redistribution_allowed: "unclear"
+    commercial_use_allowed: "unclear"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 227 MiB, SFZ FLAC 127 MiB; percussion set SF2 15 MiB"
+    instruments: "45 melodic and 43 percussion entries (incomplete GM)"
+    quality_note: "Not auditioned. Incomplete set."
+    checksum: null
+    bundle: "no"
+    bundle_reason: "Copyleft licence with an exception we have not read in full, and mixed sample licences. Unclear means no."
+  - id: musescore-general
+    name: "MuseScore_General (SF2/SF3)"
+    kind: soundfont
+    status: listed
+    url: "https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/MuseScore_General_License.md"
+    licence: "MIT"
+    licence_url: "https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/MuseScore_General_License.md"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "yes"
+    attribution_text: "Keep the copyright and permission notices from the licence file in all copies or substantial portions, and in derivative works (per the licence page)."
+    approx_size: "not verified (fetch the real file size before bundling)"
+    instruments: "full General MIDI bank with orchestral and ambient programs"
+    quality_note: "Not auditioned. Common GM fallback candidate."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "MIT permits redistribution and commercial use with notices kept. Verify the exact file and size at bundling. The in-repo share/sound copy is a FluidR3Mono placeholder with its own FluidR3Mono_License.md which we did not read, so do not bundle that one."
+  - id: generaluser-gs
+    name: "GeneralUser GS v2.0.3"
+    kind: soundfont
+    status: listed
+    url: "https://github.com/mrbumpy409/GeneralUser-GS"
+    licence: "GeneralUser GS License v2.0 (custom)"
+    licence_url: "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/main/documentation/LICENSE.txt"
+    redistribution_allowed: "unclear"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "not verified (README says 30.7 MB RAM footprint, 261 presets, 13 drum kits)"
+    instruments: "General MIDI and Roland GS bank, 261 presets, 13 drum kits"
+    quality_note: "Not auditioned. Often praised as a compact GM bank."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "Licence allows use in software projects and says do not link directly to download files (ship a local copy). Custom licence, so a human should read it fully and confirm redistribution inside a bundle."
+  - id: vsco2-ce
+    name: "VSCO 2 Community Edition"
+    kind: samples
+    status: listed
+    url: "https://github.com/sgossner/VSCO-2-CE"
+    licence: "CC0 1.0 (repo LICENSE file)"
+    licence_url: "https://raw.githubusercontent.com/sgossner/VSCO-2-CE/master/LICENSE"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "not verified; SFZ release exists on the sfz branch"
+    instruments: "brass, keys, strings, woodwinds, percussion, misc"
+    quality_note: "Not auditioned. Orchestral staples for cinematic work."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "CC0 so legally fine. Size unknown and per instrument sizes vary, so ship as optional download packs after sizing."
+  - id: vcsl
+    name: "Versilian Community Sample Library"
+    kind: samples
+    status: listed
+    url: "https://github.com/sgossner/VCSL"
+    licence: "CC0 1.0 (README and LICENSE file)"
+    licence_url: "https://raw.githubusercontent.com/sgossner/VCSL/master/LICENSE"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "about 20 to 75 MB raw WAV per instrument; whole library large"
+    instruments: "aerophones, chordophones, electrophones (incl TX81Z), idiophones, membranophones; includes most of VSCO 2 CE"
+    quality_note: "Not auditioned. Raw WAV, needs SFZ mapping or our importer."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "CC0 and broad, but large and mapping quality varies. Optional packs only."
+  - id: osiris-piano
+    name: "Osiris Piano (Versilian Studios and Karoryfer Samples)"
+    kind: sfz
+    status: listed
+    url: "https://github.com/sfzinstruments/Osiris_Piano"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "not verified; repo has no releases"
+    instruments: "piano with sustained and noisy variants"
+    quality_note: "Not auditioned."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "CC0 but size, format and quality unchecked."
+  - id: virtuosity-drums
+    name: "Virtuosity Drums (Versilian Studios and Karoryfer Samples)"
+    kind: sfz
+    status: listed
+    url: "https://github.com/sfzinstruments/virtuosity_drums"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "not verified"
+    instruments: "jazz drum kit, six mic positions"
+    quality_note: "Not auditioned. Jazz kit, perhaps good for brushes and soft playing."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "CC0 but size unchecked and style is niche."
+  - id: surge-xt
+    name: "Surge XT"
+    kind: synth
+    status: listed
+    url: "https://github.com/surge-synthesizer/surge"
+    licence: "GPL 3"
+    licence_url: "https://github.com/surge-synthesizer/surge/blob/main/LICENSE"
+    redistribution_allowed: "unclear"
+    commercial_use_allowed: "yes"
+    attribution_required: "yes"
+    attribution_text: "GPL notices and source offer."
+    approx_size: "not verified"
+    instruments: "wavetable and subtractive synth, pads and plucks"
+    quality_note: "Not auditioned. Plugin, better hosted via CLAP than embedded."
+    checksum: null
+    bundle: "no"
+    bundle_reason: "GPL 3 is copyleft and our licence is undecided. Treat as an optional user installed plugin, never bundled. Patch and wavetable licences not checked."
+  - id: freesound-cc0
+    name: "Freesound CC0 sounds (per sound)"
+    kind: samples
+    status: listed
+    url: "https://freesound.org/help/faq/#licenses"
+    licence: "CC0 per sound (Freesound licence summary)"
+    licence_url: "https://freesound.org/help/faq/#licenses"
+    redistribution_allowed: "unclear"
+    commercial_use_allowed: "unclear"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "varies per sound"
+    instruments: "textures, field recordings, foley, risers"
+    quality_note: "Not auditioned. Quality varies by uploader."
+    checksum: null
+    bundle: "no"
+    bundle_reason: "Each sound has its own licence and uploader, so each needs separate verification. Only individually checked CC0 picks could ever ship. NC sounds must never ship."
+
+  - id: builtin-soft-piano
+    name: "Soft Piano"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "additive piano: stretched partials, two string beating, velocity brightness, long natural decay"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-warm-pad
+    name: "Warm Pad"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "three detuned band limited saws and a sub sine through a slow breathing low pass, wide stereo"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-warm-strings
+    name: "Warm Strings"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "four detuned saws with delayed vibrato and a smooth low pass, slow bowed attack"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-pluck
+    name: "Pluck"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "detuned saws through a low pass that closes after the attack, short decay"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-sub-bass
+    name: "Sub Bass"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "sine with two soft harmonics and gentle saturation"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-choir-pad
+    name: "Choir Pad"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "detuned saws with vibrato and breath noise through three vowel resonances (ah), slow swell"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-bell
+    name: "Bell"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "inharmonic additive partials with their own decays, spread across the stereo field"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-soft-pulse
+    name: "Soft Pulse"
+    kind: builtin
+    status: wired
+    url: "core/composer-engine/src/voices.rs"
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "two slow pulse width modulated pulse waves through a low pass, mellow lead or arp"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-electric-piano
+    name: "Electric Piano"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "tine and tone bar partials with a short bark and a slow left right tremolo"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-mallet
+    name: "Mallet"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "marimba like bar: fundamental plus two fast decaying inharmonic partials"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-guitar-pluck
+    name: "Guitar Pluck"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "six decaying partials shaped by a pluck position, with a short pick noise"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-brass-pad
+    name: "Brass Pad"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "three detuned saws through a low pass that opens as the note swells in"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-flute
+    name: "Flute"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "sine and two soft harmonics with breath noise, a chiff and a late vibrato"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-organ
+    name: "Organ"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "eight drawbar sine partials with a key click and a slow rotating speaker swing"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-bass-pluck
+    name: "Bass Pluck"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "sub sine plus a saw through a fast closing low pass, lightly saturated"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: builtin-lead
+    name: "Lead"
+    kind: builtin
+    status: wired
+    format: "builtin"
+    url: "core/composer-engine/src/voices.rs"
+    download_url: null
+    file: null
+    licence: "Original project code, generated at run time, no third party audio, presets or samples"
+    licence_url: null
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "0 bytes of audio (computed live)"
+    instruments: "two detuned saws and a square through a low pass with vibrato that fades in"
+    quality_note: "Not auditioned by ear yet: the owner listening check is outstanding. Tuned by level, pitch and envelope tests only."
+    checksum: "sha256:fa98d3a6186326aff99b84108cf902d536b9ff7faa15b2e23bbbcdd5a2013077"
+    bundle: "yes"
+    bundle_reason: "Built in, nothing to download, no licence duty. Product licence follows D2."
+  - id: freepats-xylophone
+    name: "FreePats Xylophone (medium mallets)"
+    kind: soundfont
+    status: wired
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ChromaticPercussion/xylophone.html"
+    download_url: "https://freepats.zenvoid.org/ChromaticPercussion/Xylophone1/Xylophone-MediumMallets-SF2-20200706.tar.xz"
+    file: "freepats-xylophone/bank.sf2"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 1.7 MiB download, 4.2 MB extracted"
+    instruments: "xylophone with medium mallets (VCSL samples)"
+    quality_note: "Not auditioned by ear. Credit is not required; credit given anyway: Versilian Community Sample Library (Versilian Studios), assembled by roberto@zenvoid.org."
+    checksum: "sha256:b142f2a25f0610f13d1d657c60ae3f28be58cf026d216826125c6fb9d1af631b"
+    bundle: "yes"
+    bundle_reason: "CC0, under 5 MB, licence page and in-archive LICENSE.txt read."
+  - id: freepats-ukulele
+    name: "FreePats Ukulele"
+    kind: soundfont
+    status: wired
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/GuitarFamily/ukulele.html"
+    download_url: "https://github.com/freepats/ukulele1/releases/download/2026-08-11/Ukulele-SF2-20260811.7z"
+    file: "freepats-ukulele/bank.sf2"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 1.5 MiB download, 2.7 MB extracted"
+    instruments: "tenor ukulele with body tap and chuck"
+    quality_note: "Not auditioned by ear. Credit is not required; credit given anyway: recorded by Mateusz Dabrowski."
+    checksum: "sha256:38eeee4b5a040c9c172a68dad2e37a657d8ae2d878f6a1f19ee2ab5f6dbd8461"
+    bundle: "yes"
+    bundle_reason: "CC0, under 5 MB, licence page and in-archive LICENSE.txt read."
+  - id: freepats-picked-bass-yr
+    name: "FreePats Picked Bass YR"
+    kind: soundfont
+    status: wired
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ElectricGuitar/clean-electric-bass.html"
+    download_url: "https://github.com/freepats/electric-bass-YR/releases/download/2019-09-30/PickedBassYR-SF2-20190930.7z"
+    file: "freepats-picked-bass-yr/bank.sf2"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 2.2 MiB download, 3.5 MB extracted"
+    instruments: "electric bass guitar, picked (Yamaha RBX)"
+    quality_note: "Not auditioned by ear. Credit is not required; credit given anyway: samples by Andrea Biasior."
+    checksum: "sha256:e6bff767c352cd27de2de8cfff326d0849a76bb38d876075eecd5ffd2dc5afd0"
+    bundle: "yes"
+    bundle_reason: "CC0, under 5 MB, licence page and in-archive LICENSE.txt read."
+  - id: freepats-ocarina
+    name: "FreePats Ocarina"
+    kind: soundfont
+    status: wired
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Wind/ocarina.html"
+    download_url: "https://github.com/freepats/ocarina1/releases/download/2024-10-02/Ocarina-SF2-20241002.7z"
+    file: "freepats-ocarina/bank.sf2"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 3.0 MiB download, 3.2 MB extracted"
+    instruments: "ocarina, soft breathy wind"
+    quality_note: "Not auditioned by ear. Credit is not required; credit given anyway: recorded by Xavimart, Gonzalo and Roberto."
+    checksum: "sha256:1d48403208a38555503bbd9f65d09815ee4edb10ba01e9a345935ae44c38179c"
+    bundle: "yes"
+    bundle_reason: "CC0, under 5 MB, licence page and in-archive LICENSE.txt read."
+  - id: freepats-synth-brass-2
+    name: "FreePats Synth Brass 2"
+    kind: soundfont
+    status: wired
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-brass.html"
+    download_url: "https://github.com/freepats/synth-brass-2/releases/download/2024-06-10/SynthBrass2-SF2-20240610.7z"
+    file: "freepats-synth-brass-2/bank.sf2"
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 3.4 MiB download, 4.7 MB extracted"
+    instruments: "DX7 style brass (Dexed render), brass pad"
+    quality_note: "Not auditioned by ear. Credit is not required; credit given anyway: samples by Strix SoundFont Team."
+    checksum: "sha256:d094cd3067efd057fdbba0cc9ca831496fa9331580544ae943cb1dca9da476b1"
+    bundle: "yes"
+    bundle_reason: "CC0, under 5 MB, licence page and in-archive LICENSE.txt read."
+  - id: freepats-fm-piano-2
+    name: "FreePats FM Piano 2"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ElectricPiano/synthesized-piano.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 4.6 MiB download, 15 MiB extracted"
+    instruments: "FM electric piano (Rhodes like)"
+    quality_note: "Not auditioned by ear. Warm electric piano gap. Extracted size is large for the browser blob."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-fm-piano-1
+    name: "FreePats FM Piano 1"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ElectricPiano/synthesized-piano.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 11 MiB download, 23 MiB extracted"
+    instruments: "FM electric piano"
+    quality_note: "Not auditioned by ear. Larger sibling of FM Piano 2."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-tubular-bells
+    name: "FreePats Tubular Bells (small)"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ChromaticPercussion/tubular-bells.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 4.3 MiB download, 7.8 MiB extracted (small version)"
+    instruments: "tubular bells"
+    quality_note: "Not auditioned by ear. Cinematic bell tone."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-hang-d-minor
+    name: "FreePats Hang (D minor)"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ChromaticPercussion/hang.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 11 MiB download, 25 MiB extracted"
+    instruments: "hang drum, D minor scale"
+    quality_note: "Not auditioned by ear. Ambient favourite, large."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-glass
+    name: "FreePats Glass"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ChromaticPercussion/glass.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 9.8 MiB download, 26 MiB extracted"
+    instruments: "glass harmonica style tones"
+    quality_note: "Not auditioned by ear. Ambient texture."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-church-organ
+    name: "FreePats Church Organ Emulation"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Organ/pipe-organ.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 13 MiB (tar.xz)"
+    instruments: "pipe organ"
+    quality_note: "Not auditioned by ear. Warm sustained pad like organ."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-drawbar-organ
+    name: "FreePats Drawbar Organ Emulation"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Organ/electric-organ.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 5.8 MiB (tar.xz)"
+    instruments: "drawbar electric organ"
+    quality_note: "Not auditioned by ear. Just over the 5 MB fetch limit."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-accordion
+    name: "FreePats Button Accordion"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Organ/accordion.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SFZ WAV 5.7 MiB (7z), no SF2 offered"
+    instruments: "button accordion"
+    quality_note: "Not auditioned by ear. SFZ only."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-spanish-classical-guitar
+    name: "FreePats Spanish Classical Guitar"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Guitar/acoustic-guitar.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 9.5 MiB download, 19 MiB extracted"
+    instruments: "nylon string classical guitar"
+    quality_note: "Not auditioned by ear. Large for a first run bundle."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-clean-electric-guitar-small
+    name: "FreePats Clean Electric Guitar (bridge small)"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ElectricGuitar/clean-electric-guitar.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 6.3 MiB download, 10 MiB extracted"
+    instruments: "clean electric guitar, bridge pickup, small version"
+    quality_note: "Not auditioned by ear. Just over the 5 MB fetch limit."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-finger-bass-yr
+    name: "FreePats Finger Bass YR"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/ElectricGuitar/clean-electric-bass.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 2.5 MiB download, 4.0 MiB extracted"
+    instruments: "electric bass guitar, fingered"
+    quality_note: "Not auditioned by ear. Sibling of the fetched Picked Bass."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-lately-bass
+    name: "FreePats Lately Bass"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-bass.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 2.0 MiB download, 3.8 MiB extracted"
+    instruments: "synth bass"
+    quality_note: "Not auditioned by ear. Small synth bass."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-synth-calliope
+    name: "FreePats Synth Calliope"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Synthesizer/synth-lead.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 7.5 MiB download, 8.6 MiB extracted"
+    instruments: "calliope synth lead"
+    quality_note: "Not auditioned by ear. Lead slot."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-kalimba
+    name: "FreePats Kalimba"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Ethnic/kalimba.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 3.7 MiB (tar.xz)"
+    instruments: "kalimba thumb piano"
+    quality_note: "Not auditioned by ear. Soft pluck gap. Not fetched only because the five fetch slots are used."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-clarinet
+    name: "FreePats Clarinet"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Reed/clarinet.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 6.7 MiB (tar.xz)"
+    instruments: "clarinet"
+    quality_note: "Not auditioned by ear. Woodwind slot."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-tenor-saxophone-small
+    name: "FreePats Tenor Saxophone (small)"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Reed/saxophone.html"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 6.5 MiB (tar.bz2)"
+    instruments: "tenor saxophone, small version"
+    quality_note: "Not auditioned by ear. Woodwind slot."
+    checksum: null
+    bundle: "yes"
+    bundle_reason: "CC0 stated on the FreePats page (read 2026-11-23). Not fetched."
+  - id: freepats-steel-string-guitar
+    name: "FreePats FSS Steel-String Guitar"
+    kind: soundfont
+    status: listed
+    format: "sf2"
+    url: "https://freepats.zenvoid.org/Guitar/steel-acoustic-guitar.html"
+    download_url: null
+    file: null
+    licence: "GPL 3 or later with a special exception"
+    licence_url: "https://www.gnu.org/licenses/gpl-3.0.html"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "SF2 2.7 MiB small, 12 MiB full"
+    instruments: "steel string acoustic guitar"
+    quality_note: "Not auditioned. Licence is GPL with an exception, not CC0."
+    checksum: null
+    bundle: "no"
+    bundle_reason: "GPL family licence, copyleft, kept out until a licence review (D2)."
+  - id: ixox-flute
+    name: "Ixox Flute"
+    kind: sfz
+    status: listed
+    format: "sfz"
+    url: "https://sfzinstruments.github.io/woodwinds/ixox_flute/"
+    download_url: null
+    file: null
+    licence: "CC BY 4.0"
+    licence_url: "https://creativecommons.org/licenses/by/4.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "yes"
+    attribution_text: "Xavier Hosxe, Ixox Flute (sfz version), CC BY 4.0 with licence URL."
+    approx_size: "SFZ FLAC 10.7 MB"
+    instruments: "flute"
+    quality_note: "Not auditioned. Samples are FLAC and composer-sampler reads WAV and SF2 only, so it needs a FLAC decoder first. Licence read on the sfzinstruments page."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "CC BY needs credit and the FLAC reader is missing."
+  - id: karoryfer-growlybass
+    name: "Karoryfer Growlybass"
+    kind: sfz
+    status: listed
+    format: "sfz"
+    url: "https://sfzinstruments.github.io/basses/growlybass/"
+    download_url: null
+    file: null
+    licence: "CC0 1.0"
+    licence_url: "https://creativecommons.org/publicdomain/zero/1.0/legalcode"
+    redistribution_allowed: "yes"
+    commercial_use_allowed: "yes"
+    attribution_required: "no"
+    attribution_text: null
+    approx_size: "WAV 160 MB"
+    instruments: "Squier Jazz bass"
+    quality_note: "Not auditioned. Licence read on the sfzinstruments page only; the vendor page was not read."
+    checksum: null
+    bundle: "maybe"
+    bundle_reason: "Too large for a first run bundle. Offer as an optional pack."
+
+rejected_unverified:
+  # Licence page could not be opened in this pass, so not catalogued. Check by hand before any use.
+  - "Sonatina Symphonic Orchestra (sourceforge licence page 404; believed Sampling Plus, not safe)"
+  - "Philharmonia Orchestra samples (site redirect loop, licence unread)"
+  - "Karoryfer commercial shop libraries (home page lists no licences)"
+  - "FluidR3 GM (FluidR3Mono_License.md not read)"
+  - "Arachno and any sound set with a non commercial or unreadable licence"
+
+gaps:
+  - "Real choir (aah and ooh vocal) with natural release: only synth pad choir found"
+  - "Studio quality solo and ensemble strings (legato, long sustain): only synth strings, VSCO style sections not auditioned"
+  - "Cinematic hybrid textures, risers, impacts, evolving ambient beds"
+  - "Cinematic big percussion (taiko, epic toms, low drums) with a checked licence"
+  - "Soft plucks and mallets (celesta, music box, kalimba) with a verified licence"
+  - "Warm electric piano and felt piano"
+  - "Verified CC0 or CC BY real choir, trumpet, trombone, French horn, cello and violin that fit a small download: none found in this pass (Karoryfer libraries are CC0 on the sfzinstruments index but 100 MB and up, and their vendor pages state no licence)"
+  - "FreePats Recorder page showed no licence line when read, so it is not catalogued"
+  - "Drums and percussion: only large kits (FreePats Acoustic Drum Kit 53 MiB SF2). No kit under 5 MB verified"
+  - "FLAC sample sets (many SFZ packs) cannot load until the sampler has a FLAC decoder"
+
+plan:
+  - "1. Importer accepts WAV, SF2 and SFZ by drag in, reads a licence field or sidecar licence.txt and stores it with the sound."
+  - "2. A WAV drop becomes a sampler instrument: pitch detect, root key and loop point suggestion, velocity from filename hints."
+  - "3. SF2 and SFZ imports are referenced, not copied into the app bundle, so licence duty stays visible to the user in the sound list."
+  - "4. Gaps (choir, hybrid textures, cinematic percussion, plucks) are filled by user owned or CC0 packs offered from this catalogue (bundle yes or maybe only)."
+  - "5. Each project records the licence and attribution text of every sound it uses so export can emit a credits file."

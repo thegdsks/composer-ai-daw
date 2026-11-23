@@ -1,0 +1,14 @@
+/* Allowlisted data and signal colors: instrument families, record and error signal. Chrome never adds hues here. */
+@theme {
+  --color-danger: light-dark(#a8281f, #ff8a80);
+  --color-record: light-dark(#b3261e, #ff7a70);
+
+  --color-family-keys: light-dark(oklch(0.62 0.08 250), oklch(0.72 0.08 250));
+  --color-family-strings: light-dark(oklch(0.62 0.08 20), oklch(0.72 0.08 20));
+  --color-family-pads: light-dark(oklch(0.62 0.08 300), oklch(0.72 0.08 300));
+  --color-family-bass: light-dark(oklch(0.62 0.08 150), oklch(0.72 0.08 150));
+  --color-family-plucks: light-dark(oklch(0.62 0.08 80), oklch(0.72 0.08 80));
+  --color-family-choir: light-dark(oklch(0.62 0.08 340), oklch(0.72 0.08 340));
+  --color-family-bells: light-dark(oklch(0.62 0.08 200), oklch(0.72 0.08 200));
+  --color-family-perc: light-dark(oklch(0.62 0.08 50), oklch(0.72 0.08 50));
+}

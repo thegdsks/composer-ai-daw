@@ -1,0 +1,50 @@
+# Manual checks for the owner. Nothing here has been run on Safari or Firefox.
+# Setup (same for both browsers), from the repo root:
+#   node web/spike/build.mjs
+#   node web/spike/serve.mjs 8765
+# Open http://127.0.0.1:8765/ (localhost counts as a secure context). Record results in this file.
+status: untested
+browsers:
+  - name: Safari (current release, macOS; repeat on iOS if available)
+    result: null
+    steps:
+      - step: Open the page and read the status area before pressing Start.
+        expect: page loads, text says "not started", no console errors
+      - step: Press Start (a user gesture is required).
+        expect: within about 1 s the status area shows JSON with framesRendered increasing
+      - step: Read main.crossOriginIsolated and main.sharedArrayBuffer.
+        expect: both true (COOP and COEP are sent by serve.mjs)
+        if_false: record it; the audio design must not need SharedArrayBuffer
+      - step: Compare main.sabCounterOnMain with worklet.sabCounterSeenByWorklet across three updates.
+        expect: both increase and stay within about 2 of each other (counter ticks every 100 ms)
+        if_stuck: worklet value stays 0 or frozen while main grows. This is the known WebKit issue
+          (notes/web-limits.yaml, bugs.webkit.org/show_bug.cgi?id=237144). Record it, then rely on
+          message passing for control and telemetry.
+      - step: Listen to the output for the 4.25 s demo (two tracks, tempo halves at 2 s, loops).
+        expect: audible saw and sine notes, no clicks or dropouts; peak between 0.1 and 0.3, clippedFrames 0
+      - step: Press "Note on", wait 1 s, press "Note off".
+        expect: a sustained A4 sine starts within a few tens of ms and releases; rejectedLiveNotes stays 0
+      - step: Record main.sampleRate, main.baseLatency, main.outputLatency.
+        expect: a number each (outputLatency may be null or 0 on Safari; write down what it shows)
+      - step: Leave the tab in the background for 30 s, return.
+        expect: state running or suspended; if suspended record it (autoplay and background policy)
+      - step: In the console run `navigator.requestMIDIAccess`.
+        expect: undefined means no Web MIDI in this Safari. A function means test it separately before promising MIDI keyboards.
+  - name: Firefox (current release, macOS)
+    result: null
+    steps:
+      - step: Open the page, press Start.
+        expect: status JSON appears, framesRendered increasing, peak above 0
+      - step: Read main.crossOriginIsolated and main.sharedArrayBuffer.
+        expect: both true
+      - step: Compare sabCounterOnMain and sabCounterSeenByWorklet.
+        expect: both increase together
+      - step: Press "Note on" then "Note off".
+        expect: audible A4, rejectedLiveNotes stays 0
+      - step: Record sampleRate, baseLatency, outputLatency.
+        expect: numbers; outputLatency may be null (not implemented in some versions)
+      - step: In the console run `typeof navigator.requestMIDIAccess`.
+        expect: "function" only after the Web MIDI permission prompt model is available; otherwise "undefined", record it
+determinism_in_browser:
+  step: Optional. Open the console after a few seconds and compare nothing by ear; the bit exact proof is the node test.
+  note: Float rounding in the wasm engine is the same on every engine (no fused multiply add in wasm), so audio must match across browsers.

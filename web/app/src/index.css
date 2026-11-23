@@ -1,0 +1,86 @@
+/* Hallmark · posture: restrained · shape: app screen · theme: pinned by notes/ui-plan.yaml visual_design */
+@import 'tailwindcss';
+/* Data and signal colors live apart so chrome stays provably monochrome. */
+@import './data-colors.css';
+
+/* Design tokens: each color is a light and dark pair, so one declaration serves both themes. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --color-surface: light-dark(#f2f2f2, #121212);
+  --color-panel: light-dark(#fafafa, #1a1a1a);
+  --color-panel-2: light-dark(#e8e8e8, #262626);
+  --color-line: light-dark(#c4c4c4, #3a3a3a);
+  --color-ink: light-dark(#111111, #eeeeee);
+  --color-ink-dim: light-dark(#4f4f4f, #a8a8a8);
+  /* Chrome accent is ink itself: solid ink on paper, inverted in dark. */
+  --color-accent: light-dark(#111111, #f2f2f2);
+  --color-accent-ink: light-dark(#ffffff, #0a0a0a);
+
+  --color-roll-bg: light-dark(#fcfcfc, #0f0f0f);
+  --color-roll-row: light-dark(#f0f0f0, #161616);
+  --color-roll-line: light-dark(#e2e2e2, #222222);
+  --color-roll-beat: light-dark(#cecece, #2e2e2e);
+  --color-roll-bar: light-dark(#9a9a9a, #505050);
+  --color-roll-outside: light-dark(#e4e4e4, #080808);
+  --color-note: light-dark(#6a6a6a, #8e8e8e);
+  --color-note-edge: light-dark(#2a2a2a, #dcdcdc);
+  --color-note-selected: light-dark(#000000, #ffffff);
+  --color-playhead: light-dark(#000000, #ffffff);
+  --color-key-white: light-dark(#ffffff, #2c2c2c);
+  --color-key-black: light-dark(#2a2a2a, #0a0a0a);
+  --color-key-label: light-dark(#4f4f4f, #a8a8a8);
+  --color-roll-outkey: light-dark(#e2e2e2, #0c0c0c);
+  --color-loop: light-dark(#8a8a8a, #707070);
+  --color-ghost: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.3));
+
+  --duration-fast: 90ms;
+  --duration-base: 140ms;
+  --duration-slow: 220ms;
+}
+
+:root {
+  color-scheme: light dark;
+  scrollbar-color: light-dark(#8a8a8a, #5a5a5a) light-dark(#e8e8e8, #1a1a1a);
+}
+
+/* The theme setting pins a scheme; without it the system preference decides. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply m-0 overflow-hidden bg-surface font-sans text-ink;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+/* One visible focus ring for every control, keyboard users only. */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

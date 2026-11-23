@@ -1,0 +1,588 @@
+# UI reference map of openDAW (a browser DAW, AGPL). Paths in src: are relative to the clone root
+# <reference checkout>/opendaw. Behavior is described in our own words, nothing is copied.
+# Complements notes/ref-opendaw.yaml (which sampled the UI only lightly).
+# live: marks facts seen in the running app at https://opendaw.studio (no sign-in, nothing uploaded
+# or exported, sessions closed). Two viewports were used: 1280x577 and 1600x900.
+# Not done live (headless, no audio device or input): playing sound, recording, adding an effect.
+
+meta:
+  license: "AGPL-3.0-or-later. Ideas and behavior are free, expression is not (see CLAUDE.md Reference code rule)."
+  ui_stack:
+    - fact: "No React and no virtual DOM. A small JSX runtime creates real DOM nodes, per-component Sass adopted as constructable stylesheets, observable values for state, a lifecycle object that owns every subscription."
+      src: ["packages/app/studio/src/ui/workspace/PanelResizer.tsx:1-21", "packages/lib/jsx/src/create-element.ts", "packages/lib/dom/src/html.ts"]
+    - fact: "Timeline, note editor, automation, meters and sample waveforms are canvas painters driven by a shared animation frame loop; menus, dialogs, device panels and mixer strips are DOM."
+      src: ["packages/studio/core/src/ui/canvas/painter.ts:5-22", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:100-106"]
+  ui_scope_of_this_file: "layout, timeline, note editor, device and mixer panels, browsers, input, feedback, onboarding, theming, perf tactics, a11y, beginner friction"
+
+layout:
+  - id: screens_are_named_workspaces
+    tag: borrow
+    fact: "The studio has a fixed set of named screens, each a tree of nested horizontal and vertical splits holding panels. Screens are default (arrangement), mixer, modulation, piano tutorial, project info, shader visualizer, code editor and tempo tap, plus a hidden dashboard. The user switches with icons at the top right, a next and previous screen shortcut, or direct shortcuts per screen."
+    src: ["packages/app/studio/src/ui/workspace/Default.ts:54-291", "packages/app/studio/src/ui/workspace/Workspace.ts:6-12", "packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:127-170"]
+    live: "Top right shows 8 screen icons, the first active. Clicking the second icon swapped the arrangement for the mixer plus analysis screen and kept the device panel at the bottom."
+  - id: default_screen_composition
+    tag: borrow
+    fact: "Default screen is a row of browser (left, fixed 300 px, starts collapsed), a column of timeline (flex weight 2), content editor (starts collapsed) and device panel (fixed 248 px), and mixer (right, collapsed, max 480 px). Collapsed panels show only a title strip or a vertical side tab."
+    src: ["packages/app/studio/src/ui/workspace/Default.ts:6-21", "packages/app/studio/src/ui/workspace/Default.ts:69-111"]
+    live: "First open of a new project showed Timeline expanded, Editor and Devices as thin header bars, Browser and Mixer as vertical side tabs on the far left and right."
+  - id: panel_constraints_flex_or_fixed
+    tag: borrow
+    fact: "Each panel declares either a flex weight with min and optional max size, or a fixed size. Fixed panels and collapsed panels are not resizable. Dragging a divider redistributes flex weight between exactly the two neighbours, clamped by both of their min and max sizes."
+    src: ["packages/app/studio/src/ui/workspace/Workspace.ts:13-23", "packages/app/studio/src/ui/workspace/PanelResizer.tsx:40-63"]
+  - id: panel_flags
+    tag: borrow
+    fact: "Per panel flags decide whether it may be minimized, popped out, or starts minimized. The device panel and dashboard cannot be popped out; the notepad and project info cannot be minimized."
+    src: ["packages/app/studio/src/ui/workspace/Default.ts:14-37", "packages/app/studio/src/ui/workspace/Workspace.ts:30-39"]
+  - id: popout_to_browser_window
+    tag: rethink
+    fact: "A panel can be popped out into a separate 640 by 480 browser window and be re-embedded later. If the popup is blocked the user sees an info dialog asking to check the popup blocker. One panel instance may live in only one place at a time."
+    src: ["packages/app/studio/src/ui/workspace/PanelContent.tsx:92-120", "packages/app/studio/src/ui/workspace/PanelContent.tsx:56-58", "packages/app/studio/src/ui/workspace/PanelPlaceholder.tsx:142-146"]
+  - id: small_window_squeeze
+    tag: avoid
+    fact: "Layout is flex only, there is no breakpoint logic. In a short window the arrangement panel can be squeezed to nothing while the editor and devices take the space."
+    live: "At 1280x577 after adding an instrument only the Editor and Devices panels were visible and the track list was gone. At 1600x900 the same project showed timeline, editor and devices stacked comfortably."
+    src: ["packages/app/studio/src/ui/workspace/Default.ts:81-98"]
+  - id: panels_toggle_by_shortcut
+    tag: borrow
+    fact: "Browser, content editor and device panel toggle with Shift plus B, E and D. Tempo, marker, signature, key and chord lanes toggle with Shift plus T, M, S, K, C. Clips toggle with Shift plus G."
+    src: ["packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:62-97"]
+  - id: auto_reveal_editor
+    tag: borrow
+    fact: "Double clicking a region, or creating one by double click on an empty lane, makes the content editor visible if it was collapsed and points it at that region. Adding an instrument from the dialog also opened the editor."
+    src: ["packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:154-180"]
+    live: "After Add Instrument with Cubed the editor panel expanded to a piano roll without any extra click."
+
+timeline:
+  - id: lane_model
+    tag: borrow
+    fact: "Left column holds a header per channel (icon, name, record arm, mute, solo, monitor, a menu); right area holds the lanes. Extra primary lanes for tempo, signature, key, chords and markers sit above the channel lanes and are hidden by default except markers. A launch clip column strip can be shown left of the regions."
+    src: ["packages/app/studio/src/ui/timeline/tracks/primary/PrimaryTracks.tsx", "packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx", "packages/studio/core/src/StudioSettings.ts:28-44"]
+    live: "Header strip of a new channel showed instrument icon, name 'Cubed', sub label 'Notes', and four small round controls plus a three dot menu. Markers row exists but is thin and empty by default."
+  - id: region_parts_decide_drag
+    tag: borrow
+    fact: "There is no tool palette. What a drag does depends on which part of a region the pointer is over: start edge, end edge, body (move, also across lanes), content start, loop length handle, fade in handle, fade out handle. The cursor changes per part."
+    src: ["packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:287-345", "packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"]
+  - id: modifier_key_gestures
+    tag: borrow
+    fact: "Alt on a region shows a scissors cursor and a preview line at the snapped cut point; Alt click cuts, Alt plus Shift cuts without consolidating. Shift on a fade handle drag changes the fade curve slope instead of length. Shift plus wheel zooms around the pointer, Alt plus wheel pans, plain horizontal wheel pans with a dead zone."
+    src: ["packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:182-203", "packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:252-285", "packages/app/manual/public/keyboard-shortcuts.md:14-20"]
+  - id: draw_region_by_double_click
+    tag: borrow
+    fact: "Double click on empty lane space creates a region that fills the snap interval under the pointer, trimmed so it never overlaps neighbours, selects it and opens it in the editor. Disabled when the channel is frozen."
+    src: ["packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:154-180"]
+  - id: snapping
+    tag: borrow
+    fact: "One shared snap setting with units from Smart through bar down to 1/128. Smart picks the grid from zoom so cells never get narrower than about 16 px. Snap menu sits left of the lane area. Finer and coarser snap have shortcuts. Moves compare snapping the delta against snapping the absolute position and take whichever is closer to the pointer. Snap honours bar length when a signature track exists."
+    src: ["packages/app/studio/src/ui/timeline/Snapping.ts:18-70", "packages/app/studio/src/ui/timeline/Snapping.ts:110-118", "packages/app/studio/src/ui/shortcuts/CommonShortcuts.ts:18-26"]
+    live: "Snap dropdown reads 'Smart' by default in both timeline and note editor headers."
+  - id: zoom_and_wheel_calibration
+    tag: borrow
+    fact: "Wheel zoom normalizes odd wheel devices: it tracks the largest recent wheel delta (decaying over about 300 ms) and expresses each tick as a fraction of it, then applies a user speed preference. Zoom anchors on the pointer position, clamped to the visible range."
+    src: ["packages/app/studio/src/ui/timeline/WheelScaling.ts:6-42"]
+  - id: selection_and_multi_select
+    tag: borrow
+    fact: "Click selects, Shift click toggles, a rubber band rectangle selects, Shift plus rectangle inverts. Select all, deselect all and delete are shared across editors through one common shortcut set."
+    src: ["packages/app/manual/public/keyboard-shortcuts.md:9-12", "packages/app/studio/src/ui/shortcuts/CommonShortcuts.ts:28-42", "packages/app/studio/src/ui/timeline/SelectionRectangle.tsx"]
+  - id: overlap_policy_is_a_setting
+    tag: rethink
+    fact: "When a region is dropped, moved or duplicated over another, the app resolves it by a user setting: clip the existing one (default), push the existing one to a new lane below, or keep the existing and push the new one. The resolver has had many regression tests and at least one known open crash path."
+    src: ["packages/studio/core/src/StudioSettings.ts:5", "packages/studio/core/src/StudioSettings.ts:79-87", "docs/overlapping-regions-behaviour.md:1-8", "errors/P2-timeline-overlap-after-clipping.md:1-8"]
+  - id: loop_and_playhead_and_scroll
+    tag: borrow
+    fact: "Loop is a draggable bar in the ruler with start handle, end handle and body drag. Follow cursor (auto scroll with the playhead) is an opt in toggle, off by default. Drags near the edge auto scroll at a capped speed, with exclusions for resize handles and header knobs."
+    src: ["packages/app/studio/src/ui/timeline/LoopAreaEditor.tsx:12-30", "packages/studio/core/src/StudioSettings.ts:35-43", "packages/app/studio/src/ui/timeline/Config.ts:3-10"]
+    live: "Header shows a loop toggle next to record, play, stop. Ruler shows bar numbers with a darker horizontal bar above it for the loop and a long pill slider for the visible range."
+  - id: track_height_and_group_buses
+    tag: borrow
+    fact: "Each lane has a bottom edge drag handle (5 px), double click resets, height capped at 240 px and stored in the project. A group of channels can be folded behind a group bus lane with a collapse toggle. One undo step per resize, Escape cancels."
+    src: ["plans/track-resizing.md:1-12", "packages/app/studio/src/ui/timeline/tracks/audio-unit/UnitLane.tsx:60-75", "packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:9-16"]
+  - id: tempo_signature_markers_as_lanes
+    tag: borrow
+    fact: "Tempo, meter, key and chord changes are ordinary lanes on the timeline rather than modal dialogs, shown on demand from a Primary Tracks submenu in the timeline plus menu."
+    src: ["packages/app/studio/src/ui/timeline/TimelineHeader.tsx:55-90", "packages/app/manual/public/key-and-chords.md:16-18"]
+
+note_editor:
+  - id: create_by_double_click
+    tag: borrow
+    fact: "Double click on empty grid creates a note at the snapped position and clicked pitch, using the last used duration and velocity as defaults, selects it, and auditions it. Double click on an existing note deletes it. Creation and selection are one undo step."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:215-248", "packages/app/studio/src/ui/timeline/editors/notes/NoteDrawDefaults.ts:4-15"]
+  - id: alt_drag_create_with_velocity
+    tag: rethink
+    fact: "Alt drag on empty space starts a create gesture where vertical drag distance reads as velocity while the pitch stays where the drag started. Hidden unless the user reads the manual."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:121-140", "packages/app/manual/public/keyboard-shortcuts.md:22-24"]
+  - id: drag_parts_and_audition
+    tag: borrow
+    fact: "Dragging a note body moves position and pitch together; dragging the note end changes length. Both audition the pitch while dragging, and a pitch change retriggers the audition. Dragging the loop edge of the region inside the editor changes the loop duration."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:250-283", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:110-121"]
+  - id: property_lane_under_grid
+    tag: borrow
+    fact: "Under the pitch grid a property lane edits one per-note value at a time (velocity by default), chosen from a small dropdown with min and max labels. Ctrl or Cmd drag paints values, Alt drag draws a straight line of values."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/NoteEditor.tsx:122-125", "packages/app/studio/src/ui/timeline/editors/notes/property/PropertyHeader.tsx:16-40", "packages/app/manual/public/keyboard-shortcuts.md:26-29"]
+    live: "Under the empty piano roll a 'Velocity' dropdown with 100% and 0% range labels was visible."
+  - id: scale_and_key_helpers
+    tag: borrow
+    fact: "The roll has a scale highlight: a 12 bit mask of allowed pitch classes plus a root, editable by clicking pitch classes, with a toggle to follow the project key at the playhead. A menu action 'Fit to Key' pushes notes onto the scale. The project key can also be set by playing a chord, and key and chords can be detected from existing note regions."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/pitch/ScaleConfig.ts:4-50", "packages/app/studio/src/ui/timeline/editors/notes/NoteEditor.tsx:110-120", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchMenu.ts:91-93", "packages/app/manual/public/key-and-chords.md:26-39"]
+  - id: edit_menu_contents
+    tag: borrow
+    fact: "Edit menu offers delete, duplicate, step recording, consolidate, quantize, resize by two or half, inverse, reverse, fit to key and transpose by semitone or octave. View menu offers note height presets, center notes and zoom to all notes."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchMenu.ts:23-108", "packages/app/studio/src/ui/timeline/editors/notes/NoteViewMenu.ts:9-43"]
+  - id: step_recording
+    tag: borrow
+    fact: "With step recording on and playback stopped, each incoming MIDI note is written at the snapped playhead with the snap length, then the playhead advances by that length. The cursor changes look while it is on."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/NoteEditor.tsx:83-103", "packages/app/studio/src/ui/timeline/editors/notes/NoteEditor.tsx:247-250"]
+  - id: initial_view_and_focus_care
+    tag: borrow
+    fact: "On first layout the roll centers on the middle of existing notes, or on C3 area when empty. The editor takes keyboard focus only when nothing else holds it, to avoid breaking region shortcuts after a content swap."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/NoteEditor.tsx:181-208"]
+    live: "Empty region opened with the keyboard strip centered around C3 and a one bar region outline in gold."
+
+devices_and_mixer:
+  - id: device_panel_for_selected_channel
+    tag: borrow
+    fact: "One shared device panel shows the instrument and effect chain of the selected channel, with insert points between devices. Both the add instrument and add effect actions open the same device browser filtered for that insert point."
+    src: ["packages/app/manual/public/device-browser.md:7-15", "packages/app/studio/src/ui/devices/AddEffectButton.tsx:16-22", "packages/app/studio/src/ui/tour/TourSteps.ts:75-78"]
+    live: "Device panel for 'Cubed' showed the device header with power toggle, name, preset folder icon and menu, knobs with value labels under each, a 16 step pattern grid, and a channel strip at the far right."
+  - id: audition_before_commit_picker
+    tag: borrow
+    fact: "The device picker creates the clicked item at once so it sounds immediately. The next click first undoes the previous pick so only one candidate exists. Enter or Ok keeps it as one undo step; Escape or Cancel restores everything. A piano under the list plays the candidate; up and down arrows step through entries; Space plays the transport."
+    src: ["packages/app/manual/public/device-browser.md:17-37", "plans/device-browser-nonmodal.md:5-10", "packages/app/studio/src/ui/browse/DeviceAudition.ts"]
+    live: "Add Instrument dialog: search field 'Search names and tags', count '94 / 94', filter toggles, list of names with a short description, info pane reading 'Select an instrument to create and preview it', an on screen piano, Cancel and Ok."
+  - id: picker_cramped_when_short
+    tag: avoid
+    fact: "The picker dialog gives the piano a fixed band, so the list gets very few rows on a short window."
+    live: "At 1280x577 only four list rows were visible out of 94."
+    src: ["packages/app/studio/src/ui/browse/DeviceDialog.tsx"]
+  - id: non_modal_picker_cost
+    tag: avoid
+    fact: "Making the audition picker non modal was studied and found to break undo (undo can step below the checkpoint base), fold unrelated edits into the checkpoint, and confuse which channel the piano follows. The team kept it modal."
+    src: ["plans/device-browser-nonmodal.md:5-24"]
+  - id: effect_drag_and_drop
+    tag: rethink
+    fact: "Effects and instruments are drag sources with a ghost badge showing how many devices move. Dragging between channels was requested; maintainer closed it in favour of cut and paste. A request to drag between a layer rack and its parent chain is open."
+    src: ["packages/app/studio/src/ui/devices/DeviceDragging.ts:8-40", "issues/0057.md:1-12", "issues/0408.md:1-12"]
+  - id: mixer_strip_layout
+    tag: borrow
+    fact: "A strip, top to bottom, has input name, sends, output routing selector, pan knob, volume readout and peak readout over a tall fader with dB scale, then mute and solo. Master strip shows output routing and a mastering entry. Context menu on a strip offers group collapse, freeze, auto EQ, duplicate, delete, reset mute and reset solo. Mute and solo act on the edited channel by single key press."
+    src: ["packages/app/studio/src/ui/mixer/ChannelStrip.tsx:183-216", "packages/app/manual/public/mixer.md:9-25", "packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:110-117"]
+    live: "Mixer screen showed two strips (Cubed and master 'Output' with 'Mastering' and 'Default'), with a tall fader, dB ticks and a header icon each."
+  - id: analysis_panel_beside_mixer
+    tag: borrow
+    fact: "Mixer screen pairs the strips with an analysis panel: two VU meters, spectrum, spectrogram, loudness level bars, goniometer and scope."
+    src: ["packages/app/studio/src/ui/workspace/Default.ts:38-44", "packages/app/studio/src/ui/tour/TourSteps.ts:83-86"]
+    live: "Analysis panel on the right of the mixer screen listed VU L and R, Spectrum, Spectrogram, Level (LUFS), Gonio and Scope."
+  - id: routing_is_dropdowns
+    tag: borrow
+    fact: "Routing is edited with plain output selector dropdowns per strip (channel to bus, bus to output, audio output device), not a patch bay."
+    src: ["packages/app/studio/src/ui/mixer/ChannelOutputSelector.tsx", "packages/app/studio/src/ui/mixer/BusOutputSelector.tsx", "packages/app/studio/src/ui/mixer/AudioOutputSelector.tsx"]
+  - id: layer_racks
+    tag: rethink
+    fact: "Layered instruments and nested effect chains exist (composite device), which needs extra UI for entering a layer and for drag targets mid chain. Beginners see more concepts."
+    src: ["packages/app/studio/src/ui/devices/InstrumentCompositeLayer.tsx", "packages/app/studio/src/ui/devices/CompositeEntryList.tsx", "issues/0408.md:1-12"]
+
+browser_and_library:
+  - id: one_browser_many_scopes
+    tag: borrow
+    fact: "A side browser panel switches between scopes (samples, soundfonts and others) with a search field, folder tree, and drag out to the timeline or an instrument. Dropping a sample on the timeline creates an audio track. It starts collapsed."
+    src: ["packages/app/studio/src/ui/browse/BrowserPanel.tsx", "packages/app/studio/src/ui/browse/BrowseScope.tsx", "packages/app/studio/src/ui/tour/TourSteps.ts:49-62", "packages/app/studio/src/ui/workspace/Default.ts:6-13"]
+    live: "A vertical 'Browser' tab sits on the left edge, the empty timeline says 'Drop instruments or samples here'."
+  - id: sample_audition
+    tag: borrow
+    fact: "Samples in the list audition on double click with buffering, playing and error visual states; starting a drag ejects any audition."
+    src: ["packages/app/studio/src/ui/browse/SampleView.tsx:80-90"]
+  - id: presets_scope_cloud_user
+    tag: borrow
+    fact: "Presets cover single device, effect chain and a whole channel (rack). Stock ones come from the cloud, user ones live on the device. A folder icon on every device header opens a list with user presets on top and stock ones below. Saving asks for name, description and comma separated tags."
+    src: ["packages/app/manual/public/presets.md:3-40", "packages/app/manual/public/device-browser.md:39-58"]
+  - id: spotlight_command_palette
+    tag: borrow
+    fact: "A command line opened by Shift+Enter or Cmd+F creates devices and presets, opens projects, goes to screens and creates sample tracks. Verb symbols (plus, slash, at, tilde) limit the search; matching is by word start; most used entries rank first; unavailable entries are greyed with a reason; the box is draggable and remembers where it was."
+    src: ["packages/app/manual/public/spotlight.md:3-60", "plans/spotlight.md:1-30", "packages/app/studio/src/ui/spotlight/SpotlightVerbs.ts"]
+    live: "Shift+Enter opened a floating input 'Type a device, preset, script, sample or place...' with a legend: + create, / open, @ goto, ~ sample, and a help icon."
+  - id: dashboard_as_library
+    tag: borrow
+    fact: "The dashboard is a hidden screen. Left side has big actions (New Project, New Live Room, Open Bundle, Neural Demux). Below are tabs Projects, Templates, Demos, Samples, Soundfonts, WebCLAP with a search box. Right side links to preferences, manuals, scripting docs, bug report, feature request and cloud backup buttons."
+    src: ["packages/app/studio/src/ui/dashboard/ActionButtons.tsx:15-35", "packages/app/studio/src/ui/dashboard/Resources.tsx:60-72", "packages/app/studio/src/ui/workspace/Default.ts:55-68"]
+    live: "Dashboard matched this list. Empty project tab says 'No projects yet. Start with a demo project.'"
+  - id: local_first_storage
+    tag: rethink
+    fact: "Projects, samples and soundfonts live in the browser private file system. Saved projects show in the Projects tab to reopen, rename or delete. Save As and Save as Template exist. Cloud backup to the user's own Drive, Dropbox or Nextcloud is optional and goes straight from the browser. A bundle file carries a project with all its samples."
+    src: ["packages/app/manual/public/project-management.md:5-26", "packages/app/studio/src/ui/dashboard/Backup.tsx:20-35"]
+    live: "openDAW menu lists New, Open, Save, Save As, Save as Template, Save Bundle File to Disk, Open Bundle File from Disk, Import, Export, Backup, Nextcloud. Footer shows Storage usage."
+  - id: demo_projects_install_flow
+    tag: borrow
+    fact: "Demo projects are a curated id list fetched from a server and shown as cards with title, artist and tags. Opening one asks for approval to install it, and first asks to approve losing unsaved changes."
+    src: ["packages/app/studio/src/ui/dashboard/DemoProjectsList.tsx:23-50", "packages/app/studio/src/ui/dashboard/DemoProject.tsx:19-37"]
+
+transport_and_tempo:
+  - id: header_transport_cluster
+    tag: borrow
+    fact: "Top bar centre has record, play, stop and loop buttons whose tooltips carry their shortcut, then bar, beat, tempo, meter, shuffle and key readouts with tiny captions under each."
+    src: ["packages/app/studio/src/ui/header/TransportGroup.tsx:25-125", "packages/app/studio/src/ui/header/TempoControl.tsx", "packages/app/studio/src/ui/header/KeyControl.tsx"]
+    live: "Header read '001 BAR, 1 BEAT, 120 BPM, 4/4 METER, 60 SHUFFLE, C maj KEY'. Values are editable fields."
+  - id: transport_shortcuts
+    tag: borrow
+    fact: "Space toggles play, period stops, R records with count-in, Shift+R records without count-in, Ctrl+R restarts recording and discards takes, Ctrl+M toggles metronome, Shift+L toggles loop."
+    src: ["packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:38-57", "packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:102-109"]
+  - id: tempo_matching_tools
+    tag: borrow
+    fact: "A tap tempo button in the header and a full Match Tempo screen exist. Tempo automation is an optional lane. Audio regions can detect BPM with an analysis action."
+    src: ["packages/app/studio/src/ui/header/TapButton.tsx", "packages/app/studio/src/ui/workspace/Default.ts:277-291", "packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts:253"]
+  - id: record_arming_and_inputs
+    tag: borrow
+    fact: "Each channel header has an arm button, shift click adds more armed tracks, the arm button doubles as an input peak meter, a header menu picks the audio or MIDI input and monitoring mode (off, direct, through effects) and force mono."
+    src: ["packages/app/manual/public/recording.md:11-37", "packages/app/studio/src/ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts:51-70"]
+  - id: footer_shows_latency
+    tag: borrow
+    fact: "Footer always shows online state, project name, sample rate, output latency in ms, memory and storage use. A latency warning appears when above a user threshold, and there is a guided latency calibration."
+    src: ["packages/app/studio/src/ui/Footer.tsx:45-160", "packages/studio/core/src/StudioSettings.ts:59-69", "packages/app/manual/public/latency-calibration.md:1-12"]
+    live: "Footer read 'Online Yes, Project Untitled, SampleRate 48k, Output 24.0ms, Memory 11/29M, Storage 0kB'."
+
+input_model:
+  - id: shortcut_contexts
+    tag: borrow
+    fact: "Shortcuts are grouped in named contexts (global, regions, chord track, note editor, content editor, device panel, software MIDI, piano panel). The more local context wins when its element has focus. Each shortcut has a description string and the same data feeds tooltips and a shortcut manager page."
+    src: ["packages/app/studio/src/service/StudioShortcutManager.ts:33-42", "packages/app/studio/src/ui/shortcuts/ShortcutTooltip.ts", "packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:8-20"]
+  - id: user_remappable_shortcuts
+    tag: borrow
+    fact: "Only the differences from defaults are stored in local storage under a custom shortcuts key, and old snapshots are migrated so defaults that later moved are not mistaken for user choices."
+    src: ["packages/app/studio/src/service/ShortcutStorage.ts:8-36", "packages/app/manual/public/keyboard-shortcuts.md:3"]
+  - id: modifier_conventions
+    tag: borrow
+    fact: "Consistent grammar across editors: Cmd or Ctrl drag copies; Alt drag is fine control or freeze axis or draw line; Shift click toggles selection, Shift disables snapping when dragging values and warp markers."
+    src: ["packages/app/manual/public/keyboard-shortcuts.md:9-49"]
+  - id: pointer_drag_protocol
+    tag: borrow
+    fact: "All drags go through one helper with update, approve, cancel and finally steps and pointer capture. Escape cancels. Live updates are applied unmarked and the undo mark happens only on approve, so a whole drag is one undo step. Optional pointer lock for endless drags is a preference."
+    src: ["packages/lib/dom/src/dragging.ts:7-60", "packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:330-345", "packages/studio/core/src/StudioSettings.ts:70-78"]
+  - id: hit_testing_by_capture_objects
+    tag: borrow
+    fact: "Canvas content is hit tested by a small capture object per editor that maps a local point to a typed target (note start, note end, region part, loop edge) instead of per element DOM events. The same object drives the cursor shape."
+    src: ["packages/studio/core/src/ui/canvas/capturing.ts:1-26", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:314-320"]
+  - id: context_menus_everywhere
+    tag: borrow
+    fact: "Right click menus exist on regions, notes, tracks, strips and devices and carry the shortcut text next to each item. Long press on touch synthesizes a context menu (500 ms, 10 px slop) because WebKit sends none."
+    src: ["packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts:76-266", "packages/app/studio/src/ui/TouchContextMenu.ts:4-50"]
+  - id: drag_and_drop_payloads
+    tag: borrow
+    fact: "Drag payloads are a small typed union (sample, soundfont, file, device with ids, instrument). Drops are validated per target so lanes and device chains show whether a drop is allowed."
+    src: ["packages/app/studio/src/ui/AnyDragData.ts:6-30", "packages/app/studio/src/ui/DragAndDrop.ts"]
+  - id: touch_is_second_class
+    tag: avoid
+    fact: "On a phone the app does not load; it shows a static page saying it needs a computer. Touch is partly handled on desktop browsers (long press, touch action, history buttons default on only when touch points exist)."
+    src: ["packages/app/studio/src/main.ts:15-34", "packages/app/studio/src/mobile.sass:1-40", "packages/studio/core/src/StudioSettings.ts:22"]
+
+feedback:
+  - id: undo_model
+    tag: borrow
+    fact: "Edits run inside a transaction. A marked transaction becomes one undo step and folds leftover unmarked edits in. Unmarked updates are used for live drag previews. A checkpoint lets a picker roll back or commit everything since as one step."
+    src: ["packages/lib/box/src/editing.ts:114-136", "packages/lib/box/src/editing.ts:243-250", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:222-226"]
+  - id: undo_ui_is_minimal
+    tag: rethink
+    fact: "Undo and redo are two icons that grey out when impossible and a pair of shortcuts. There is no visible history list. The history buttons are off by default on non touch devices (shortcuts still work)."
+    src: ["packages/app/studio/src/ui/header/UndoRedoButtons.tsx:19-43", "packages/studio/core/src/StudioSettings.ts:22"]
+  - id: toasts
+    tag: borrow
+    fact: "Short toast messages stack at one corner, display 2 seconds or 5 seconds when text is longer than 60 characters, then fade. A preference turns them off."
+    src: ["packages/app/studio/src/ui/surface/Toast.tsx:11-25", "packages/app/studio/src/ui/surface/Surface.tsx:212-213", "packages/app/studio/src/ui/pages/PreferencesPageLabels.ts:14"]
+  - id: progress_dialogs_with_cancel
+    tag: borrow
+    fact: "Long jobs (stem import, exports) open a progress dialog with a headline, optional progress bar and a cancel callback."
+    src: ["packages/app/studio/src/ui/components/dialogs.tsx:226-262", "packages/app/studio/src/service/StudioService.ts:346-369"]
+  - id: friendly_error_boundaries
+    tag: borrow
+    fact: "Known environmental failures are caught and turned into plain dialogs: audio engine start failure, storage full, file picker blocked, component chunk failed to load. Unknown errors go to an error reporter with scrubbing."
+    src: ["packages/app/studio/src/service/StudioService.ts:511-557", "packages/app/studio/src/errors/ErrorHandler.ts:96-110", "errors/ENV-storage-quota-exceeded.md:1-8", "errors/ENV-file-picker-not-allowed.md:1-8"]
+  - id: error_triage_with_priorities
+    tag: borrow
+    fact: "Production error reports are grouped into files per cause with priority (P1 to P3, ENV for environment) and status, with a recommended fix and evidence. This keeps a handful of real bugs separate from browser noise."
+    src: ["errors/error-triage.md", "docs/error-triage.md"]
+  - id: empty_states_are_actions
+    tag: borrow
+    fact: "Empty timeline and empty device panel both show two buttons, Add instrument and Add audio track, plus a drop hint. The empty Projects tab points to demo projects."
+    src: ["packages/app/studio/src/ui/dashboard/Resources.tsx:68-70"]
+    live: "Timeline: 'Add instrument (+)' and 'Add audio track (+)' buttons and the text 'Drop instruments or samples here'. Devices panel repeated the same two buttons centered."
+  - id: unsaved_work_guards
+    tag: rethink
+    fact: "Leaving the page prompts via the browser. A recovery backup of the open project is written to private storage so it can be restored on next start. A request to back up continuously while editing is open."
+    src: ["packages/app/studio/src/service/StudioService.ts:612", "packages/studio/core/src/project/Recovery.ts:16-40", "issues/0084.md:1-12"]
+  - id: dialog_export_options_visible
+    tag: borrow
+    fact: "Mixdown export is one small dialog: section (entire song), format, channels, sample rate, bit depth, with a one line description of what the format does, and a single Export button."
+    live: "Export Mixdown dialog showed Section 'Entire song', Format 'WAV' with the line 'Uncompressed PCM. 32 bit float is lossless, 16 and 24 bit are quantized.', Channels Mono or Stereo, Sample Rate 48000 Hz, Bit Depth 32 Bit Float, Export button."
+    src: ["packages/app/studio/src/ui/components/BounceOptionsSelector.tsx", "packages/app/studio/src/service/Mixdowns.ts"]
+
+onboarding:
+  - id: offered_tour_not_forced
+    tag: borrow
+    fact: "When a project opens, a small non modal dialog asks 'Take a quick tour of the studio?' with Not now, Start tour and a Never show this again checkbox. Not offered while another dialog is open or on an engine restart. Preference can switch the offer back on; there is no menu entry to restart it."
+    src: ["plans/studio-tour.md:1-30", "packages/studio/core/src/StudioSettings.ts:19-26"]
+    live: "New Project immediately showed the welcome dialog over the empty studio."
+  - id: tour_card_design
+    tag: borrow
+    fact: "The tour is 19 cards, one card at a time with a notch pointing at the target, Next shows its shortcut, arrows and Enter move, Escape dismisses. The studio stays interactive underneath. It switches screens for you and restores what it changed. Cards are two sentences at most."
+    src: ["packages/app/studio/src/ui/tour/TourSteps.ts:24-107", "plans/studio-tour.md:19-30"]
+    live: "Card 1 of 19 anchored to the openDAW menu with a close icon and a Next button showing an arrow key hint."
+  - id: manual_inside_app
+    tag: borrow
+    fact: "A Manuals link sits in the top bar and tooltips link out. Manual pages are short with screenshots: getting started, project management, recording, device browser, presets, mixer, key and chords, spotlight, keyboard shortcuts, latency, browser support."
+    src: ["packages/app/studio/src/ui/header/Header.tsx:66", "packages/app/manual/public/index.md:19-23", "packages/app/manual/public/keyboard-shortcuts.md:1-5"]
+    live: "Top bar has a green help icon, a search icon and a Manuals link."
+  - id: demos_and_templates
+    tag: borrow
+    fact: "Finished demo projects to take apart and user made Templates sit on the dashboard beside blank New Project. Welcome copy says to open a demo or start empty, add a track, drop in an instrument and write."
+    src: ["packages/app/manual/public/index.md:19-23", "packages/app/studio/src/ui/dashboard/DemoProjectsList.tsx:23-50"]
+    live: "Dashboard tabs Projects, Templates, Demos, Samples, Soundfonts, WebCLAP."
+  - id: hover_hints_and_help_toggle
+    tag: borrow
+    fact: "Controls carry tooltips with the shortcut; value tooltips follow knob drags. A preference hides help hints."
+    src: ["packages/app/studio/src/ui/surface/TextTooltip.tsx", "packages/app/studio/src/ui/surface/ValueTooltip.tsx", "packages/studio/core/src/StudioSettings.ts:14"]
+  - id: first_instrument_is_instant
+    tag: borrow
+    fact: "Creating a first instrument also creates a one bar note region on a new lane and opens the editor on it (preference new-instrument-note-region, default on). A beginner gets a place to click straight away."
+    src: ["packages/studio/core/src/StudioSettings.ts:82", "packages/app/studio/src/ui/timeline/NewInstrumentRegion.ts"]
+    live: "After choosing Cubed and Ok a gold one bar region appeared on a new lane and the editor opened beneath."
+
+theming_and_density:
+  - id: dark_first_default
+    tag: borrow
+    fact: "Dark UI by default with accent colors (blue, green, yellow, cream, orange, red, purple) and eleven neutrals. Instrument lanes and strips are color coded."
+    src: ["plans/color-schemes.md:1-12"]
+    live: "Dark blue-grey panels, green and cyan accents on buttons, gold region."
+  - id: schemes_vary_only_neutrals
+    tag: borrow
+    fact: "Three schemes (classic, modern, high contrast) change only the neutral greys; accents stay. Colors are CSS variables written at boot and re-read by canvas painters on repaint. A light theme was requested and is partly done."
+    src: ["plans/color-schemes.md:1-60", "packages/studio/core/src/StudioSettings.ts:45-51", "issues/0092.md:1-12"]
+  - id: dense_small_type
+    tag: rethink
+    fact: "Controls and labels are small and tight (readouts around 9 to 11 px). It suits a large desktop screen and hurts readability in a small window."
+    live: "At 1600x900 knob captions, device parameter labels and the footer were tiny; the note editor property column used tiny grey text."
+    src: ["packages/app/studio/src/ui/header/Header.sass", "packages/app/studio/src/ui/devices/ParameterLabelKnob.sass"]
+  - id: display_zoom_and_fps
+    tag: borrow
+    fact: "Preferences include clamp to 60 fps and a plugin zoom. Display scaling is otherwise left to the browser."
+    src: ["packages/studio/core/src/StudioSettings.ts:45-51", "packages/studio/core/src/StudioSettings.ts:88-92"]
+  - id: preferences_page_is_settings_schema
+    tag: borrow
+    fact: "The preferences page is generated from a typed settings schema with defaults and a labels table, so new settings appear without new UI code. Groups are visibility, timeline, appearance, time display, engine, pointer, editing, plugins, debug."
+    src: ["packages/studio/core/src/StudioSettings.ts:12-110", "packages/app/studio/src/ui/pages/PreferencesPageLabels.ts:1-30", "packages/app/studio/src/ui/PreferencePanel.tsx"]
+  - id: no_responsive_below_desktop
+    tag: avoid
+    fact: "There is no tablet or phone layout. Below desktop the user gets a static notice page."
+    src: ["packages/app/studio/src/main.ts:15-34"]
+
+performance_tactics:
+  - id: canvas_painters_with_requested_updates
+    tag: borrow
+    fact: "Canvas editors repaint only when asked. Painters subscribe to range, snapping, selection and data changes, each of which calls a request update that coalesces into the next animation frame."
+    src: ["packages/studio/core/src/ui/canvas/painter.ts:5-60", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:293-300"]
+  - id: frame_throttle_to_60
+    tag: borrow
+    fact: "A single animation frame service drives all painters and meters and skips frames closer than 16 ms. On a 120 Hz screen this halved UI work across more than thirty subscribers. Exposed as a preference."
+    src: ["packages/lib/dom/src/frames.ts:28-46", "docs/performance.md:63-69", "packages/studio/core/src/StudioSettings.ts:47"]
+  - id: audio_off_main_thread
+    tag: borrow
+    fact: "Audio runs in a worklet, file and storage work in workers, and offline render and mixdown in a worker. Live meter and peak data stream from the engine to the UI. The studio needs cross origin isolation and refuses to boot without it."
+    src: ["packages/app/studio/src/main.ts:35-45", "packages/studio/core/src/OfflineEngineRenderer.ts", "packages/studio/core/src/Workers.ts"]
+  - id: custom_scrollbars
+    tag: rethink
+    fact: "Native scrollbars are hidden everywhere (to stop layout shift and style them) and custom scrollbars are drawn where wired. Where not wired, users cannot see scroll position (the clip columns have no horizontal bar)."
+    src: ["packages/app/studio/src/main.sass:47-53", "packages/studio/scrollbars/src/Scrollbars.tsx:25-55", "issues/0185.md:12-20"]
+  - id: no_list_virtualization_found
+    tag: rethink
+    fact: "Searching UI code found no virtual list for long lists. Large lists (94 devices, samples) render fully. Lists of regions are drawn on canvas so DOM size stays small."
+    src: ["packages/app/studio/src/ui/browse/ResourceBrowser.tsx:270-300", "packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionRenderer.ts"]
+  - id: wheel_event_calibration
+    tag: borrow
+    fact: "Wheel and trackpad inputs are normalized so zoom speed feels the same across devices."
+    src: ["packages/app/studio/src/ui/timeline/WheelScaling.ts:11-27"]
+  - id: perf_page_per_device
+    tag: borrow
+    fact: "A built in page renders every device offline and reports render time, marginal cost over an empty engine and per quantum cost, after a warm-up. Per device regressions are visible."
+    src: ["docs/performance.md:3-21", "packages/app/studio/src/ui/pages/PerformancePage.tsx"]
+  - id: clip_and_bound_memory_hints
+    tag: borrow
+    fact: "Footer can show memory and sample memory use; the DSP load readout toggles from the header. Mixdown for very long projects can run out of memory and crashes rather than warns."
+    src: ["packages/app/studio/src/ui/Footer.tsx:129-160", "packages/app/studio/src/ui/header/PerformanceStats.tsx:38", "errors/P3-mixdown-offline-render-oom.md:1-8"]
+
+collaboration_ui:
+  - id: live_room_join
+    tag: borrow
+    fact: "Join a live room from the main menu with room name, your name and a color; a shareable link opens the room directly. Room has no host and closes about 60 seconds after the last person leaves."
+    src: ["packages/app/manual/public/live-rooms.md:1-30"]
+    live: "Dashboard has a New Live Room button and openDAW menu has Join Live Room."
+  - id: awareness_and_follow
+    tag: rethink
+    fact: "A status bar lists people by color; a dropdown on a name offers Follow Playback, which locks your own transport and mirrors theirs. Selections and edits are shared through the project."
+    src: ["plans/follow-playback.md:1-30", "packages/app/studio/src/ui/RoomStatus.tsx", "plans/live-room-selections.md"]
+  - id: room_shortcuts_for_calls
+    tag: rethink
+    fact: "Shortcuts exist for microphone, camera and raise hand inside a room call."
+    src: ["packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:187-196"]
+  - id: conflict_resolution_docs
+    tag: rethink
+    fact: "Concurrent editing needed deterministic reconcile and several fix rounds, recorded in docs."
+    src: ["docs/live-collab-deterministic-reconcile.md", "docs/live-collab-conflict-resolve.md", "docs/live-collab-fixes.md"]
+
+accessibility:
+  - id: aria_is_nearly_absent
+    tag: avoid
+    fact: "Across the studio UI there are only about fifteen aria attribute uses, almost all on group bus folding and group clip launch controls. Main header buttons rely on title text. No reduced motion media query and no color scheme media query exist in the studio styles."
+    src: ["packages/app/studio/src/ui/mixer/ChannelStrip.tsx:129-130", "packages/app/studio/src/ui/timeline/tracks/audio-unit/UnitLane.tsx:69-70", "packages/app/studio/src/ui/header/Header.tsx:66"]
+    live: "Accessibility snapshot of the studio listed many clickable images and labels with no accessible name (timeline header, clip launch icons, note editor header)."
+  - id: keyboard_coverage_good
+    tag: borrow
+    fact: "A large part of editing is reachable from the keyboard through the shortcut contexts, and the Spotlight reaches devices and screens by text. Track resizing by keyboard was explicitly deferred."
+    src: ["packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:8-200", "packages/app/manual/public/spotlight.md:3-36", "plans/track-resizing.md:1-12"]
+  - id: canvas_content_not_exposed
+    tag: avoid
+    fact: "Regions and notes are painted on canvas and hit tested by custom code, so assistive tech cannot read them. Only one canvas (group clip overview) has a label."
+    src: ["packages/app/studio/src/ui/timeline/tracks/audio-unit/GroupOverview.tsx:18", "packages/studio/core/src/ui/canvas/capturing.ts:1-26"]
+  - id: light_theme_and_contrast_options
+    tag: borrow
+    fact: "A high contrast scheme exists and a light theme with automatic browser preference is requested, partly done. Font scaling and custom variables are future work."
+    src: ["plans/color-schemes.md:1-60", "issues/0092.md:1-12"]
+  - id: focus_management_care
+    tag: borrow
+    fact: "Editors avoid stealing focus, drag helper gives targets a tab index so keyboard shortcuts keep working after a drag."
+    src: ["packages/app/studio/src/ui/timeline/editors/notes/NoteEditor.tsx:201-208", "packages/lib/dom/src/dragging.ts:53-56"]
+
+beginner_friction:
+  walkthrough_status: "Live walk-through reached first open, New Project, tour offer, Add Instrument, empty piano roll, mixer screen, spotlight and the mixdown dialog. Not done: audible playback, recording, adding an effect, drawing notes beyond the first region, an actual export (headless, no audio or input device, nothing submitted)."
+  items:
+    - id: first_open_no_guidance_until_project
+      tag: rethink
+      fact: "The dashboard is dense: four big actions, six tabs, search, many outbound links, sponsors and contributors. The first thing a beginner must decide is New Project versus Demos, with no recommendation beyond the empty state text."
+      live: "Dashboard first screen listed New Project, New Live Room, Open Bundle, Neural Demux, 6 tabs and 60+ links."
+      src: ["packages/app/studio/src/ui/dashboard/Dashboard.tsx", "packages/app/studio/src/ui/dashboard/Contributors.tsx"]
+    - id: blank_project_needs_vocabulary
+      tag: rethink
+      fact: "A blank project asks for 'instrument' versus 'audio track', then a 94 entry picker with names like Apparat, Composite, Cubed, Korpus. Brand names do not tell a beginner what they sound like."
+      live: "Add Instrument list started with Apparat, Composite, Cubed, Korpus with short grey subtitles such as 'Scriptable Instrument' and '303-style Synth'."
+      src: ["packages/app/studio/src/ui/browse/DeviceCatalog.ts", "packages/app/studio/src/ui/browse/DeviceTags.ts"]
+    - id: hidden_gestures
+      tag: avoid
+      fact: "Key actions are gestures with no on screen affordance: double click to create or delete a note, Alt drag to create with velocity, Alt click to cut, Shift wheel to zoom, Shift click on an automation curve to add a point. The manual page lists them; the UI does not."
+      src: ["packages/app/manual/public/keyboard-shortcuts.md:9-49", "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:215-248"]
+    - id: manual_drift
+      tag: avoid
+      fact: "The mixer manual says M toggles the mixer, but the shortcut table binds M to mute of the edited channel."
+      src: ["packages/app/manual/public/mixer.md:15-18", "packages/app/studio/src/ui/shortcuts/GlobalShortcuts.ts:110-113"]
+    - id: tour_cannot_be_restarted
+      tag: avoid
+      fact: "The tour has no menu entry. A user who says Never show this again must find a preference to see it again."
+      src: ["plans/studio-tour.md:19-30"]
+    - id: recording_depends_on_hardware
+      tag: avoid
+      fact: "The manual warns that Bluetooth devices add 100 ms or more latency and the browser may under report output latency by a wide margin (90 ms reported vs 300 ms real). Users must read and calibrate."
+      src: ["packages/app/manual/public/recording.md:3-9", "packages/app/manual/public/latency-calibration.md:7-14"]
+    - id: browser_limits
+      tag: avoid
+      fact: "Audio output selection and MIDI are missing in some browsers; storage can be unavailable in Safari private mode; quota exhaustion needs a friendly dialog; file pickers need a live user gesture."
+      src: ["packages/app/manual/public/browser-support.md:5-10", "errors/ENV-storage-not-available.md:1-8", "errors/ENV-storage-quota-exceeded.md:1-8", "errors/ENV-file-picker-not-allowed.md:1-8"]
+    - id: boot_gate_is_a_raw_alert
+      tag: avoid
+      fact: "If cross origin isolation is missing the app shows a plain browser alert and nothing else."
+      src: ["packages/app/studio/src/main.ts:44-45"]
+    - id: clips_get_lost
+      tag: avoid
+      fact: "Launch clips could be moved into hidden columns, the clip view could be widened until the arrangement left the screen, and there is no visible scroll bar for the clip columns, so users without a trackpad must know Shift plus wheel."
+      src: ["issues/0185.md:6-24"]
+    - id: deleted_tracks_vanish
+      tag: avoid
+      fact: "Deleted tracks vanish without a trace; a user asked for a recycle bin."
+      src: ["issues/0327.md:1-10"]
+    - id: load_hang_and_count_in
+      tag: avoid
+      fact: "A project can hang forever on the Loading dialog until reload. MIDI notes played during count-in are dropped or snapped to the downbeat."
+      src: ["issues/0404.md:1-10", "issues/0493.md:1-10"]
+    - id: silent_overlap_clipping
+      tag: rethink
+      fact: "By default a region moved over another clips it silently. Beginners may not notice data change."
+      src: ["packages/studio/core/src/StudioSettings.ts:84", "docs/overlapping-regions-behaviour.md:5-8"]
+    - id: squeezed_layout_small_window
+      tag: avoid
+      fact: "On a short laptop window the arrangement panel is pushed out when the editor opens."
+      live: "At 1280x577 after Add Instrument the timeline was not visible."
+      src: ["packages/app/studio/src/ui/workspace/Default.ts:81-98"]
+    - id: export_choices_for_beginners
+      tag: rethink
+      fact: "Mixdown defaults to a 32 bit float WAV at 48 kHz, a heavy default for sharing. Options for MP3 style sharing are not in the first view."
+      live: "Export Mixdown defaulted to WAV, 48000 Hz, 32 Bit Float."
+      src: ["packages/app/studio/src/ui/components/BounceOptionsSelector.tsx", "packages/app/studio/src/ui/components/AudioFormatSelector.tsx"]
+  unverified:
+    - "Whether the first note region plays sound by default without further steps (no audio device in the headless session)."
+    - "What the add effect flow looks like. The device chain showed small round plus buttons at both ends rather than an Add Effect label at 1600x900; the code file AddEffectButton.tsx exists with an 'Add Effect' label, its use site was not traced."
+    - "Whether the faded round icon at the left of the MIDI button in the header is the capture MIDI button; not clicked."
+    - "Why the arrangement panel disappeared in the 1280x577 viewport (likely minimum size and flex rules; the layout code was not traced further)."
+
+lessons:
+  note: "Fifteen or more items, one line each. Applies_to names the screen or flow of OUR app."
+  items:
+    - {n: 1, tag: borrow, lesson: "Offer, do not force, a short non modal tour with Not now and Never show; add the restart entry they lack.", reason: "Beginners get orientation, experts are not blocked.", src: "plans/studio-tour.md:1-30", live: "welcome dialog on New Project", applies_to: "first run"}
+    - {n: 2, tag: borrow, lesson: "A first instrument also makes one bar of empty clip and opens the editor on it.", reason: "Removes the 'now what' moment of an empty project.", src: "packages/studio/core/src/StudioSettings.ts:82", live: "Cubed then Ok created a region and opened the roll", applies_to: "make a beat, first note"}
+    - {n: 3, tag: borrow, lesson: "Empty states show the next two actions as buttons (add instrument, add audio track) plus a drop hint.", reason: "The empty screen teaches the first step.", src: "packages/app/studio/src/ui/dashboard/Resources.tsx:68-70", live: "empty timeline and devices", applies_to: "empty project, arrangement"}
+    - {n: 4, tag: borrow, lesson: "Audition picker that creates the candidate live and undoes it on the next pick, one undo step on Ok.", reason: "Hear before you commit, never leaves junk devices.", src: "packages/app/manual/public/device-browser.md:17-37", live: "Add Instrument dialog", applies_to: "pick instrument, add effect"}
+    - {n: 5, tag: borrow, lesson: "One command palette with verbs (create, open, go to, sample), word start matching and usage ranking.", reason: "Learn the app by typing, and AI or CLI can reuse the same verb set.", src: "packages/app/manual/public/spotlight.md:3-36", live: "Shift+Enter palette", applies_to: "global, any screen"}
+    - {n: 6, tag: borrow, lesson: "Double click empty grid to place a note with remembered length and velocity, double click a note to remove it.", reason: "Fastest first-note gesture, one undo step.", src: "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:215-248", live: "n/a", applies_to: "draw notes"}
+    - {n: 7, tag: borrow, lesson: "Scale mask plus follow project key in the roll, with Fit to Key.", reason: "Wrong notes are hard to make, which suits beginners.", src: "packages/app/studio/src/ui/timeline/editors/notes/pitch/ScaleConfig.ts:4-50", live: "n/a", applies_to: "note editor"}
+    - {n: 8, tag: borrow, lesson: "Region parts decide drags and the cursor says which part, no tool palette.", reason: "Fewer modes to learn.", src: "packages/app/studio/src/ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:287-345", live: "n/a", applies_to: "arrangement"}
+    - {n: 9, tag: borrow, lesson: "Drag protocol with approve and cancel, live preview unmarked, one undo step per drag, Escape cancels.", reason: "Trustworthy editing, safe to try things.", src: "packages/lib/dom/src/dragging.ts:7-60", live: "n/a", applies_to: "all drags"}
+    - {n: 10, tag: borrow, lesson: "Smart snap that follows zoom with a minimum cell width.", reason: "Beginners never pick a grid.", src: "packages/app/studio/src/ui/timeline/Snapping.ts:23-80", live: "Snap reads Smart", applies_to: "arrangement, note editor"}
+    - {n: 11, tag: borrow, lesson: "Tooltips carry the shortcut, and shortcut definitions are data with descriptions in contexts.", reason: "Learn shortcuts by hovering; one source for UI, docs and remapping.", src: "packages/app/studio/src/ui/shortcuts/ShortcutTooltip.ts", live: "n/a", applies_to: "global"}
+    - {n: 12, tag: borrow, lesson: "Preferences generated from a typed schema with defaults.", reason: "New settings cost no UI code.", src: "packages/studio/core/src/StudioSettings.ts:12-110", live: "n/a", applies_to: "settings"}
+    - {n: 13, tag: borrow, lesson: "Footer with latency, sample rate, memory and storage plus a warning threshold.", reason: "Explains most recording problems before they happen.", src: "packages/app/studio/src/ui/Footer.tsx:45-160", live: "footer text", applies_to: "record, setup"}
+    - {n: 14, tag: borrow, lesson: "Translate known environment failures into plain dialogs and triage the rest by priority.", reason: "Browser noise should not look like a bug.", src: "errors/error-triage.md", live: "n/a", applies_to: "feedback, errors"}
+    - {n: 15, tag: borrow, lesson: "Progress dialog with cancel for every long job.", reason: "Users can stop a heavy export.", src: "packages/app/studio/src/ui/components/dialogs.tsx:226-262", live: "n/a", applies_to: "export, import"}
+    - {n: 16, tag: avoid, lesson: "Do not make gestures the only way to do key actions (Alt cut, Alt create, Shift zoom).", reason: "Hidden in a manual page, beginners never find them.", src: "packages/app/manual/public/keyboard-shortcuts.md:9-49", live: "n/a", applies_to: "arrangement, note editor"}
+    - {n: 17, tag: avoid, lesson: "Do not let flex rules squeeze the arrangement out of a short window.", reason: "Lost the main view on a laptop.", src: "packages/app/studio/src/ui/workspace/Default.ts:81-98", live: "1280x577 after Add Instrument", applies_to: "layout"}
+    - {n: 18, tag: avoid, lesson: "Do not hide native scrollbars without a replacement everywhere.", reason: "Clip columns had no visible scroll position.", src: "issues/0185.md:12-20", live: "n/a", applies_to: "arrangement, clips"}
+    - {n: 19, tag: avoid, lesson: "Do not leave canvas editors without a parallel accessible model and labels.", reason: "Nearly no aria and no reduced motion support exist.", src: "packages/app/studio/src/ui/timeline/tracks/audio-unit/GroupOverview.tsx:18", live: "snapshot had many unnamed clickables", applies_to: "accessibility, all editors"}
+    - {n: 20, tag: avoid, lesson: "Do not fail the boot with a raw alert or a phone dead end page.", reason: "Beginner on tablet or odd browser gets nothing.", src: "packages/app/studio/src/main.ts:15-45", live: "n/a", applies_to: "first run"}
+    - {n: 21, tag: avoid, lesson: "Keep the manual and shortcut table in sync by generating docs from the shortcut data.", reason: "Mixer manual and mute shortcut disagree.", src: "packages/app/manual/public/mixer.md:15-18", live: "n/a", applies_to: "help"}
+    - {n: 22, tag: rethink, lesson: "Brand named instruments in a 94 row list: show plain names and a sound sample first.", reason: "Names like Apparat tell nothing to a beginner.", src: "packages/app/studio/src/ui/browse/DeviceCatalog.ts", live: "Add Instrument list", applies_to: "pick instrument"}
+    - {n: 23, tag: rethink, lesson: "Overlap policy default of silent clipping: confirm or show a toast with undo.", reason: "Silent data change surprises beginners.", src: "packages/studio/core/src/StudioSettings.ts:84", live: "n/a", applies_to: "arrangement drag and drop"}
+    - {n: 24, tag: rethink, lesson: "A visible history list or at least toasts naming each undone step.", reason: "Undo is two icons with no names.", src: "packages/app/studio/src/ui/header/UndoRedoButtons.tsx:19-43", live: "n/a", applies_to: "feedback"}
+    - {n: 25, tag: rethink, lesson: "Dashboard first screen: one primary action and a short guided path, not 60 links.", reason: "Dense choice before any music.", src: "packages/app/studio/src/ui/dashboard/Dashboard.tsx", live: "dashboard snapshot", applies_to: "first open"}
+
+we_call_it:
+  note: "PROPOSAL. Extends the glossary in notes/ref-opendaw.yaml. Names are plain DAW words."
+  terms:
+    - {theirs: "Screen (Workspace.Screen)", we_call_it: "view layout", note: "one named arrangement of panels"}
+    - {theirs: "Panel, PanelState", we_call_it: "pane"}
+    - {theirs: "Content editor panel", we_call_it: "clip editor pane"}
+    - {theirs: "Region", we_call_it: "clip (timeline)", note: "same as ref-opendaw.yaml"}
+    - {theirs: "Clip (session)", we_call_it: "launch clip", note: "same as ref-opendaw.yaml"}
+    - {theirs: "Audio unit", we_call_it: "channel", note: "same as ref-opendaw.yaml"}
+    - {theirs: "Spotlight", we_call_it: "command palette"}
+    - {theirs: "Device Browser dialog", we_call_it: "sound picker"}
+    - {theirs: "Snap unit Smart", we_call_it: "auto grid"}
+    - {theirs: "Step recording", we_call_it: "step entry"}
+    - {theirs: "Tour", we_call_it: "guided intro"}
+    - {theirs: "Dashboard", we_call_it: "start page"}
+    - {theirs: "Primary tracks (tempo, signature, key, chords, markers)", we_call_it: "song map lanes"}
+    - {theirs: "Live Room", we_call_it: "shared session"}
+    - {theirs: "Modifier (Dragging.Process)", we_call_it: "drag session"}
+    - {theirs: "Capturing", we_call_it: "hit test"}
+
+command_api_fit:
+  rule: "Every UI action must be a serializable command in the core command API. UI, CLI and MCP are clients."
+  notes:
+    - fact: "Region part drags, note create, move, resize, delete, quantize, transpose, fit to key, group, freeze, preset save: each maps to a command with arguments. In their code the UI calls an editing API that writes through one edit transaction, so the shape is similar and can be copied as a design."
+      src: "packages/app/studio/src/ui/timeline/editors/notes/pitch/PitchEditor.tsx:222-243"
+    - fact: "Live drag previews are unmarked edits with one undo mark on approve. We should model a drag as a preview state in the UI that emits one command at the end (or a begin, update, commit command triple if the engine must hear the live value). Escape drops the preview and emits nothing."
+      src: "packages/lib/dom/src/dragging.ts:7-31"
+    - fact: "The audition picker uses a checkpoint inside the edit history. Our version should be a command group with a rollback token so the CLI and MCP can try and revert the same way."
+      src: "packages/lib/box/src/editing.ts:114-136"
+    - fact: "Command palette verbs (create, open, go to, sample) should be generated from the command registry, with each command declaring a verb, label, keywords and an enabled test with reason text."
+      src: "plans/spotlight.md:1-30"
+    - fact: "Pure UI state (panel layout, zoom, scroll, snap choice, tour progress, tool preference) may stay local, but anything that changes the song, including snap based grid for new notes, goes through commands."
+    - fact: "Shortcut definitions as data with descriptions fit a command registry: bind a key to a command id, show the same description in tooltips and in agent tool lists."
+      src: "packages/app/studio/src/service/StudioShortcutManager.ts:33-42"
+    - fact: "Screen switching and pane toggles exist as global shortcuts in their app but are view state; we may expose them as read only view commands for agents."
+
+unverified:
+  - "Exact current panel sizes persist between sessions; code for saving layout was not located."
+  - "Whether native scrollbars hidden by default hurt a trackpad-less user in practice beyond the clip columns."
+  - "Whether the faded icon near the MIDI button in the header is undo, capture MIDI or something else."
+  - "Whether the manual claim that Tab cycles screens matches the actual shortcut set (next and previous screen shortcuts exist; keys were not read)."

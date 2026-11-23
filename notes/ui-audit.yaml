@@ -1,0 +1,476 @@
+meta:
+  title: "Beginner UI audit of the composer web app (M1)"
+  date: "2026-11-23"
+  app: "web/app at http://127.0.0.1:5173 (Vite dev, Chrome via agent-browser)"
+  persona: "Beginner who wants to recreate a film or OST piece, or make a calm one hour ambient track, and found Logic Pro and Cubase confusing"
+  skills:
+    used: [agent-browser, web-design-guidelines (as a manual checklist), fixing-accessibility style checks (manual, via accessibility tree and source), impeccable (critique mindset only)]
+    unavailable: ["fixing-accessibility and baseline-ui are not in the skill list, so a manual pass was used", "no axe run, no Lighthouse"]
+  method:
+    - "Read CLAUDE.md, handoff.yaml, web/app/README.yaml, then the UI source (App, TopBar, ArrangementPanel, StatusBar, input, config)"
+    - "Drove the live app: first open, Play, Add track, draw a note by drag, Ctrl+Z, ?stress=20000, Ctrl+A and Home, dark plus reduced motion media, viewport 800 wide and 1280 wide, Tab order"
+  not_verified_in_browser:
+    - "Save then reopen via the Open file picker (native file dialogs are not drivable here), judged from source only"
+    - "Export WAV content and audibility by ear (no speakers or file check)"
+    - "Computer keyboard piano audibility (only source and the status text were read)"
+    - "MIDI keyboard hardware (feature check only: button exists when Web MIDI is supported)"
+    - "Frame timing at 20000 notes (window.composerDebug could not be read because script eval was blocked for this agent). Responsiveness is a visual and interaction impression only"
+    - "Making a four minute piece end to end, judged from source and the default region length"
+    - "Light and dark were both seen. Reduced motion media was set but the app has almost no motion to test"
+
+findings:
+  - id: F01
+    flow: "first open"
+    severity: major
+    saw: "The app opens on a project named 'Calm in C' with a Pad and a Bass track and regions, and an empty-looking band under the tracks. No welcome text, no hint of what to do first. The only hint is the status line 'Audio starts when you press a key or click' and the piano roll caption 'Click and drag on the grid to draw a note.'"
+    hurts: "A beginner sees a dense toolbar and two canvases and has no guided first action. Logic and Cubase already feel like this."
+    fix: "Add a dismissible first run card over the empty arrangement area with three steps: Press Play to hear the starter, drag in the piano roll to draw a note, press A to L to play keys. Remember dismissal in localStorage."
+    size: M
+    repro:
+      - "Open http://127.0.0.1:5173 in a fresh profile or after clearing site data"
+      - "Observe the screen: no onboarding, no explanation of Pad, Bass, region, or snap"
+  - id: F02
+    flow: "first open"
+    severity: major
+    saw: "Two stacked canvases (Arrangement above, Piano roll below) with no label saying which region the roll is editing besides the small heading 'Pad region'. Words 'region', 'Snap', 'Fit' are unexplained."
+    hurts: "Region and snap are DAW jargon. A beginner does not know a region is a clip of notes or why they have two views."
+    fix: "Rename heading to 'Editing: Pad, bars 1 to 5 (click a block above to edit another)'. Add tooltips on Snap ('Notes stick to this grid') and Fit ('Zoom to show everything')."
+    size: S
+    repro:
+      - "Open the app"
+      - "Read the roll toolbar: 'Pad region', 'Snap 1/16', 'Fit', 'Delete notes', 'Delete region'"
+  - id: F03
+    flow: "play the starter"
+    severity: major
+    saw: "Play starts audio, the button turns to 'Pause' and the footer says 'Audio running (48000 Hz)'. The first click on Play is the first user gesture so audio context starts there; before that footer says 'Audio starts when you press a key or click'. No loop, no end behaviour is shown: the song is 4 bars (about 11 seconds at 84 BPM) and then stops."
+    hurts: "A beginner who wants to tweak and listen over and over must press Play and wait for the playhead to return each time. No loop makes ambient tweaking tedious."
+    fix: "Add a Loop toggle in the transport with a loop range that defaults to the selected region, and loop on by default for the starter."
+    size: M
+    repro:
+      - "Open the app and click Play"
+      - "Wait about 12 seconds: playback stops at the end of bar 4 with no loop option anywhere"
+  - id: F04
+    flow: "play the starter"
+    severity: minor
+    saw: "Footer shows 'Level' with a meter and the number '0.00' or '0.22'. The mix is Pad on Sine and Bass on Saw, both raw oscillators."
+    hurts: "The starter sounds like a test tone, not a film or OST sound. First impression of sound quality sets the beginner's trust."
+    fix: "Ship at least two warm built in presets (soft pad, felt piano like) and use them in the starter. Hide the numeric level readout (keep the meter)."
+    size: M
+    repro:
+      - "Click Play and listen (by ear, not machine verified)"
+      - "Open the Instrument select: only 'Sine', 'Saw', and a disabled 'Coming soon'"
+  - id: F05
+    flow: "add a track"
+    severity: major
+    saw: "'Add track' adds 'Track 3' with Sine and an empty 4 bar region and selects it. The track list gives only name, instrument select, trash icon. No volume, pan, mute, solo, record arm, color."
+    hurts: "A beginner mixing pad plus bass cannot lower the bass, mute a track to hear another, or fix a loud track. Every DAW has these."
+    fix: "Add per track volume slider, mute (M) and solo (S) buttons, and pan, wired to new commands (parity rule: command API first)."
+    size: L
+    repro:
+      - "Click 'Add track'"
+      - "Look at the new row: only name field, instrument select, delete button"
+  - id: F06
+    flow: "add a track"
+    severity: major
+    saw: "The delete track button (aria-label 'Delete Track 3', trash icon) removes the track immediately with no confirm; there is only undo to recover."
+    hurts: "One mis-click next to the instrument select deletes work. Undo exists but the beginner may not know it."
+    fix: "Keep it instant but show a status toast with an Undo action ('Deleted Track 3. Undo'). Move the trash into an overflow menu."
+    size: S
+    repro:
+      - "Click the trash icon on 'Bass'"
+      - "The track and its notes vanish and no message with an Undo button appears"
+  - id: F07
+    flow: "change the instrument"
+    severity: blocker
+    saw: "The instrument select (aria-label 'Instrument for Pad') lists only 'Sine', 'Saw' and a disabled group 'Sound catalogue' with 'Coming soon'."
+    hurts: "A beginner recreating a film cue needs strings, piano, bells, pads. Two raw waveforms cannot give a film sound. This blocks the stated goal."
+    fix: "Ship the sound browser against sounds/catalogue.yaml: named categories (Pads, Keys, Strings, Bells), preview on hover, search. Start with 6 to 10 licensed sounds."
+    size: L
+    repro:
+      - "Open the app"
+      - "Click the 'Instrument for Pad' select"
+      - "Only Sine and Saw can be chosen; 'Coming soon' is disabled"
+  - id: F08
+    flow: "change the instrument"
+    severity: minor
+    saw: "The select is a native dropdown 112 px wide (class w-28). Changing instrument gives no audible audition."
+    hurts: "Beginner changes the sound and has to find the notes and press Play to learn what it sounds like."
+    fix: "Play a short chord or the current note when the instrument changes."
+    size: S
+    repro:
+      - "Change the Instrument for Bass from Saw to Sine"
+      - "No sound plays"
+  - id: F09
+    flow: "draw a melody"
+    severity: minor
+    saw: "Drag on the empty grid draws a note (verified: a drag from x 500 to 600 drew an orange selected note and status '1 selected'). The hint text 'Click and drag on the grid to draw a note' is right aligned in small dim text at the far end of the toolbar and wraps under the buttons at 800 px."
+    hurts: "Works, but the main verb of the app is in the least visible place."
+    fix: "Move the hint into an empty roll overlay while the region has no notes, and show it above the toolbar rather than right aligned."
+    size: S
+    repro:
+      - "Select an empty region (Add track)"
+      - "Resize window to 800 px wide"
+      - "The hint wraps to its own line under 'Delete notes' and 'Delete region'"
+  - id: F10
+    flow: "draw a melody"
+    severity: major
+    saw: "The piano roll shows about 11 rows high at default size, labeled only 'C4' and 'C3' or 'C5' and 'C4' on the left keyboard. There is no scale highlight, no key choice, no chord helper. All 12 notes look equal."
+    hurts: "A beginner drawing a melody hears wrong notes constantly, because every row is allowed. Logic and Cubase beginners hit exactly this. Out of key notes are the main reason a first melody sounds bad."
+    fix: "Add a Key and Scale picker (default C major or A minor) that shades in scale rows and optionally snaps drawing to them. Show note names on every white key row."
+    size: M
+    repro:
+      - "Open the app, select the Pad region"
+      - "Drag in the roll at any row: no row is marked as in or out of key"
+  - id: F11
+    flow: "draw a melody"
+    severity: major
+    saw: "The roll viewport shows only about 1 to 2 octaves and the vertical scroll is by wheel only. No vertical scrollbar, no indicator of position (labels C3 and C4 in view). The horizontal scroll is a native range 'Scroll the piano roll in time'."
+    hurts: "Beginner may not realise there are more octaves above and below, or how to reach them."
+    fix: "Add a visible vertical scrollbar or a mini range strip, and auto scroll to the notes of the selected region on open."
+    size: M
+    repro:
+      - "Select an empty region"
+      - "Look for a way to reach C2 or C6 without a wheel gesture"
+  - id: F12
+    flow: "fix a wrong note"
+    severity: minor
+    saw: "Click selects a note, Delete or Backspace removes it, arrows move by one step, shift plus arrows resize or change octave, drag moves, drag right edge resizes. 'Delete notes' button is disabled when nothing is selected."
+    hurts: "Capable but undiscoverable: no on screen text for arrows or shift. The beginner who drew a wrong note may not try arrows."
+    fix: "Show the shortcuts in the status line while a note is selected ('Arrows move, Shift plus arrows resize, Delete removes')."
+    size: S
+    repro:
+      - "Draw a note, then press ArrowUp"
+      - "It moves one semitone, with nothing in the UI that told you so"
+  - id: F13
+    flow: "fix a wrong note"
+    severity: minor
+    saw: "There is no way to hear the note being edited: dragging a note vertically previews through the live engine (preview callback exists) but pitch is shown nowhere while dragging."
+    hurts: "Beginner cannot read a pitch name while moving a note."
+    fix: "Show a small pitch name and bar position tooltip on drag."
+    size: S
+    repro:
+      - "Drag a note up or down"
+      - "No pitch label appears near the pointer"
+  - id: F14
+    flow: "change tempo"
+    severity: minor
+    saw: "'Tempo' is a text box (aria-label 'Tempo in beats per minute') showing 84 plus a static '4/4'. The value commits on blur or Enter. The time signature is not editable. No tap tempo, no tempo changes over time."
+    hurts: "A film cue often changes tempo or meter. A beginner cannot change 4/4 to 3/4 or 6/8 even though the model supports a tempo map."
+    fix: "Make the time signature a small select (2/4, 3/4, 4/4, 6/8, 5/4). Add arrow key and drag nudging on the tempo field."
+    size: M
+    repro:
+      - "Click '4/4' next to Tempo"
+      - "Nothing happens; it is a plain span"
+  - id: F15
+    flow: "change tempo"
+    severity: minor
+    saw: "Tempo changes while playing may not apply live; unknown. Not verified."
+    hurts: "A beginner expects to nudge tempo and hear the result."
+    fix: "Verify and document; if not live, apply on next play and say so."
+    size: S
+    repro:
+      - "Press Play, then type 120 in the tempo box and press Enter"
+      - "Listen whether playback speeds up (not verified by ear)"
+  - id: F16
+    flow: "copy a bar and paste it ten times"
+    severity: blocker
+    saw: "No copy, paste, duplicate, repeat or loop for notes or regions anywhere in src (grep for clipboard, paste, copy, duplicate returned no UI hits). Ctrl+A selects all notes but Ctrl+C and Ctrl+V do nothing. README known_gaps says region drag move and resize are also missing."
+    hurts: "Repeating a bar is the most common music making action. Making a four minute piece by redrawing each bar is infeasible. This blocks both goals (a film cue and a one hour ambient track)."
+    fix: "Ship Ctrl+C, Ctrl+V (paste at playhead or after selection), Ctrl+D duplicate, and for regions: Alt drag copy and a 'Repeat x N' dialog (context menu). Parity: add copy, paste_notes, duplicate_region commands first."
+    size: L
+    repro:
+      - "Open the app, click the Pad region in the arrangement"
+      - "Press Ctrl+A in the roll, then Ctrl+C, move to bar 5, press Ctrl+V"
+      - "Nothing is pasted and no message appears"
+  - id: F17
+    flow: "copy a bar and paste it ten times"
+    severity: major
+    saw: "Regions cannot be dragged, resized, or split (README known_gaps). Double click on an empty lane adds a 4 bar region; 'Delete region' removes one. Region length is fixed at defaultRegionLength."
+    hurts: "To arrange a longer piece a beginner must create many separate 4 bar regions with double click, and cannot move or stretch them to fit."
+    fix: "Region drag to move, edge drag to resize, snap to bars, Alt drag to copy."
+    size: L
+    repro:
+      - "Click on the Pad region in the arrangement and drag it right"
+      - "The region does not move"
+  - id: F18
+    flow: "make a four minute piece"
+    severity: major
+    saw: "At 84 BPM a 4 minute piece is about 84 bars. The arrangement shows about 9 bars at default zoom; there is no 'zoom to fit song' for the arrangement (Fit exists only in the roll toolbar), and no minimap or horizontal scrollbar visible on the arrangement."
+    hurts: "A beginner cannot see the whole piece or jump across it."
+    fix: "Add arrangement zoom and Fit buttons, a horizontal scrollbar, and Home key to jump to the start."
+    size: M
+    repro:
+      - "Add several regions by double clicking lanes far to the right"
+      - "Look for an arrangement zoom or Fit control: none exists in the 'Arrangement' section"
+  - id: F19
+    flow: "make a four minute piece"
+    severity: major
+    saw: "No ruler click or drag to seek. The ruler (bar numbers 1 to 9) in both canvases is passive. The playhead appears only by playing (red line)."
+    hurts: "To audition bar 40 of a long piece you must play from the start. Very frustrating when composing."
+    fix: "Click on the ruler to move the playhead and play from there. Space starts from the playhead."
+    size: M
+    repro:
+      - "Click on the bar number '3' in the arrangement ruler"
+      - "The playhead does not move (the engine only exposes stop and play, no seek in the UI)"
+  - id: F20
+    flow: "make a four minute piece"
+    severity: minor
+    saw: "20000 notes: a region 'Stress region' fills the arrangement. Ctrl+A selected '20002 selected' (count reads 20002 for 20000 generated notes), turning every note orange and the Delete notes button live."
+    hurts: "A number that does not match expectations looks like a bug, and 'Delete notes' with 20002 selected has no confirmation."
+    fix: "Check the count (off by two), and confirm before a delete of more than N notes (N from env)."
+    size: S
+    repro:
+      - "Open http://127.0.0.1:5173/?stress=20000"
+      - "Click the piano roll, press Ctrl+A"
+      - "Toolbar reads '20002 selected'"
+  - id: F21
+    flow: "undo"
+    severity: polish
+    saw: "Undo and redo are icon only buttons 'Undo (Ctrl or Cmd Z)' and 'Redo (Ctrl or Cmd Shift Z)' and work (verified: Ctrl+Z reverts the drawn note). There is no label of what will be undone."
+    hurts: "Beginner is unsure what the next undo removes."
+    fix: "Tooltip 'Undo: Add note'. Group names already exist (store.group uses names such as 'Move notes')."
+    size: S
+    repro:
+      - "Draw a note, hover the undo button"
+      - "Tooltip does not name the action"
+  - id: F22
+    flow: "save and reopen"
+    severity: major
+    saw: "'Save' downloads a .composer.json file and 'Open' picks a file. The project also autosaves to localStorage (persistence.ts saveLocal) but the UI never says so. Open is disabled with a daemon."
+    hurts: "A beginner does not know if work is safe. The word Save suggests a place inside the app but it makes a download. Clearing browser data loses the autosave without warning."
+    fix: "Show 'Saved in this browser at 14:02' in the footer, and rename the button 'Save to file'. Add a one time notice that browser storage can be cleared."
+    size: S
+    repro:
+      - "Edit the project, reload the page"
+      - "The project is restored but nothing in the UI said it was autosaved"
+      - "Click Save: a file downloads silently with only a short footer message"
+  - id: F23
+    flow: "save and reopen"
+    severity: minor
+    saw: "Open reads JSON only (accept 'application/json,.json'). There is no MIDI import in the UI even though the format crate supports MIDI."
+    hurts: "To recreate a film piece a beginner will often start from a MIDI file found online."
+    fix: "Add 'Import MIDI' to Open, using the existing midi crate through the command API."
+    size: M
+    repro:
+      - "Click Open"
+      - "The file picker only accepts .json"
+  - id: F24
+    flow: "export audio"
+    severity: minor
+    saw: "'Export WAV' renders offline and downloads a WAV; there is no progress, no format choice (MP3, FLAC), no stems, and the status line message is only 'Exported <name>'."
+    hurts: "A long one hour ambient render will look frozen with no progress. A beginner wants an MP3 to share."
+    fix: "Progress indicator with cancel, and a time estimate. MP3 later."
+    size: M
+    repro:
+      - "Click Export WAV on the starter"
+      - "No progress UI appears (judged from source and footer, audio file not inspected)"
+  - id: F25
+    flow: "computer keyboard as piano"
+    severity: major
+    saw: "Keys A S D F G H J K L ; play white notes, W E T Y U O P black notes, Z and X shift octave. The only mention is the footer text 'Keys: A to ; play notes, Z and X shift the octave (+0)' in small dim text. Notes play on the selected track but cannot be recorded into the region."
+    hurts: "Playing is fun but a beginner cannot capture what they played, and the on screen keyboard is not shown with letter labels."
+    fix: "Add a Record button (count in then capture live notes into the region) and label the keys on the roll's left keyboard when a key is held."
+    size: L
+    repro:
+      - "Click the page background, then press A, S, D"
+      - "Notes sound but nothing is added to the region and there is no record control"
+  - id: F26
+    flow: "computer keyboard as piano"
+    severity: minor
+    saw: "Typing 'Z' and 'X' are octave keys but Ctrl+Z is undo; in the project name field typing letters does not trigger notes (isTyping guard, good)."
+    hurts: "Some risk: the select elements are also guarded, but a focused button swallows Space and keys are silently consumed."
+    fix: "Show an on screen octave readout next to the roll keyboard as well as the footer."
+    size: S
+    repro:
+      - "Press X three times"
+      - "Only the footer text '(+3)' changes"
+  - id: F27
+    flow: "MIDI keyboard"
+    severity: minor
+    saw: "Button 'MIDI keyboard' toggles to 'MIDI on (N)' where N is the input count. It is hidden if Web MIDI is not supported. Hardware not tested."
+    hurts: "If MIDI permission is denied the message appears only in the transient footer for four seconds."
+    fix: "Persist the failure reason next to the button and explain browser support (Safari lacks Web MIDI)."
+    size: S
+    repro:
+      - "Click 'MIDI keyboard' and deny the permission prompt"
+      - "A message flashes in the footer for 4 seconds and the button stays 'MIDI keyboard'"
+  - id: F28
+    flow: "keyboard only use"
+    severity: major
+    saw: "Skip link 'Skip to the piano roll' exists, the roll canvas is focusable and handles arrows, Enter, Delete, Ctrl A, Home, plus and minus. But Tab from the page goes through Project name, Tempo, Play, Stop, Undo, Redo, MIDI, Open, Save, Export and then every track field. There is no keyboard way to select a region or switch track (the arrangement canvas has role 'application' but its keys are not documented), and Space always means play even when a button is focused."
+    hurts: "A keyboard only user cannot choose which region to edit, add a region (only double click), or reach notes of another track without a mouse."
+    fix: "Arrow keys in the arrangement canvas to move between regions and tracks, Enter to open in the roll, N to add a region. Document in a shortcut list."
+    size: M
+    repro:
+      - "Tab to the 'Arrangement. Click a region...' application element"
+      - "Press ArrowRight or Enter: no region is selected or added"
+  - id: F29
+    flow: "keyboard only use"
+    severity: minor
+    saw: "Space is bound globally and the keyup handler cancels it for focused buttons, so pressing Space on a focused 'Stop' or 'Add track' button plays or pauses instead of activating it."
+    hurts: "Breaks the standard button contract for keyboard and screen reader users."
+    fix: "Exempt focused buttons and links: only treat Space as transport when focus is on the body, a canvas, or the transport group."
+    size: S
+    repro:
+      - "Tab to 'Add track' and press Space"
+      - "Playback toggles and no track is added"
+  - id: F30
+    flow: "narrow window 800 px"
+    severity: major
+    saw: "At 800 px wide the top bar wraps to two rows (Open, Save, Export WAV, MIDI keyboard on the second row), the Tracks column is a fixed w-80 (320 px) leaving about 480 px for the arrangement (about 4.5 bars) and the roll toolbar hint wraps. The footer wraps to two lines. Layout is usable, nothing is clipped, but the arrangement and roll compete: the arrangement panel is a fixed 34 percent of the height with a large empty area when there are only 2 or 3 tracks."
+    hurts: "On a small laptop or split screen the visible music area is small and one third of the height is blank space."
+    fix: "Shrink the track header (w-56) below 900 px, let the arrangement height follow the track count (min 4 rows), and give the roll the rest."
+    size: M
+    repro:
+      - "Resize the browser to 800 px wide"
+      - "Observe the blank band below the 'Bass' row in the Arrangement and the 320 px Tracks column"
+  - id: F31
+    flow: "layout 1280 px"
+    severity: polish
+    saw: "At 1280 px the layout fits on one top bar row. About 75 px of the arrangement is empty when only two tracks exist, and the roll shows a small slice (about 11 rows)."
+    hurts: "Wasted height reduces the roll."
+    fix: "Make the arrangement and roll a resizable split (drag the border) and remember the split."
+    size: M
+    repro:
+      - "Open the app at 1280 by 800"
+      - "See empty arrangement area below the third lane line"
+  - id: F32
+    flow: "dark and light"
+    severity: polish
+    saw: "Both themes are driven by light-dark() tokens and follow prefers-color-scheme. Dark and light were both seen and look consistent, note and selected colors read well (teal notes, orange selected). There is no manual theme switch."
+    hurts: "A user whose OS is light cannot choose a dark editing room, a common preference for night composing."
+    fix: "Add a theme toggle (system, light, dark) in a small settings menu."
+    size: S
+    repro:
+      - "Set the OS or browser to dark: app follows"
+      - "Look for an in-app switch: none"
+  - id: F33
+    flow: "reduced motion"
+    severity: polish
+    saw: "index.css has a prefers-reduced-motion block that zeroes transitions and animations. The app has almost no animation (the playhead moves because it is time). Nothing to fix."
+    hurts: "None found."
+    fix: "Keep; also keep the playhead as a non animated line when the user wants a static view (optional follow playback toggle)."
+    size: S
+    repro:
+      - "Set prefers-reduced-motion: reduce and open the app; no visible motion besides the playhead"
+  - id: F34
+    flow: "20000 note project"
+    severity: minor
+    saw: "?stress=20000 opens with one region of 20000 notes. The roll and the arrangement drew immediately, Ctrl+A and Home responded without visible lag, and the velocity strip drew 20000 bars as a solid block. Measured frame times were not captured (debug eval blocked)."
+    hurts: "Impression only: responsive. At 20000 notes the velocity strip is an unreadable solid wall when zoomed out."
+    fix: "Aggregate velocity bars when notes are closer than 2 px. Record draw times with window.composerDebug in a perf test (perf lane)."
+    size: S
+    repro:
+      - "Open /?stress=20000, press Home in the roll"
+      - "Observe the Velocity strip as one solid bar"
+  - id: F35
+    flow: "20000 note project"
+    severity: polish
+    saw: "Undo is enabled right after opening the stress project (the build used group commands) so Ctrl+Z would remove the generated notes."
+    hurts: "Stress mode is a dev feature; a beginner will not see it."
+    fix: "Clear the undo stack after the stress build."
+    size: S
+    repro:
+      - "Open /?stress=20000: the Undo button is enabled with nothing the user did"
+  - id: F36
+    flow: "accessibility"
+    severity: major
+    saw: "The two canvases (role 'application', aria-label long sentences) expose nothing about notes or regions to a screen reader: notes, selection, and pitch are only drawn pixels. Footer meter 'Output level' and status are labeled."
+    hurts: "A blind or low vision musician cannot know what notes exist. Beginners using a screen magnifier also lose the keyboard column text at small sizes."
+    fix: "Announce the selected note ('C4, bar 2 beat 1, length 1 beat') in the live region on arrow move. Provide a text list view of notes in the selected region as an alternative."
+    size: L
+    repro:
+      - "Turn on VoiceOver, Tab to the 'Piano roll' application element, select a note and press ArrowRight"
+      - "Nothing about the note is announced (judged from source: no aria-live update on move)"
+  - id: F37
+    flow: "accessibility"
+    severity: minor
+    saw: "Toolbar buttons Zoom out and Zoom in are labeled with the glyphs minus and plus (aria-labels 'Zoom out (minus)', 'Zoom in (plus)'). Text size in the footer is text-xs (12 px) in ink-dim."
+    hurts: "Small dim footer text is the only place keyboard help lives; contrast of ink-dim on panel is acceptable but size is low."
+    fix: "Raise footer text to 13 or 14 px and use a help button instead of burying keys in the footer."
+    size: S
+    repro:
+      - "Inspect the footer at 1280 px"
+      - "Key help is 12 px dim text"
+  - id: F38
+    flow: "first open"
+    severity: minor
+    saw: "The status line shows 'Editing in this browser' permanently."
+    hurts: "Developer language (backend kind) is noise for a beginner."
+    fix: "Show it only when connected to composerd, and show autosave status instead."
+    size: S
+    repro:
+      - "Open the app and read the footer"
+  - id: F39
+    flow: "first open"
+    severity: minor
+    saw: "The page has no help, shortcut sheet or tour. The only shortcut text is in the footer and tooltips."
+    hurts: "A beginner has no place to ask 'how do I'."
+    fix: "Add a '?' button and a key (Shift plus /) that opens a one screen shortcut and gesture overlay."
+    size: M
+    repro:
+      - "Look for a Help or ? control: none"
+      - "Press ? : nothing happens"
+  - id: F40
+    flow: "draw a melody"
+    severity: minor
+    saw: "Snap select 'Snap to grid' offers 1/4, 1/4 triplet, 1/8, 1/8 triplet, 1/16, 1/16 triplet, 1/32, 1/32 triplet."
+    hurts: "A beginner sees 8 options of musical jargon and no 'Off' choice or plain labels."
+    fix: "Default to 1/8, add 'Off' (free), and label as 'Grid: eighth notes'."
+    size: S
+    repro:
+      - "Open the 'Snap to grid' select"
+      - "No Off option"
+
+good_to_keep:
+  - "Instant start: no account, no setup, a playable starter 'Calm in C' opens straight away"
+  - "Single obvious primary action: 'Play (Space)' is the only filled button in the top bar"
+  - "Draw by drag on the empty grid, drag a note to move, drag its right edge to resize: direct and familiar"
+  - "Undo and redo are universal and work (Ctrl or Cmd Z, shift for redo)"
+  - "Computer keyboard as piano with physical key codes (layout independent) and octave shift"
+  - "Light and dark themes through one token set, readable canvases in both"
+  - "Skip link, labeled controls ('Instrument for Pad', 'Tempo in beats per minute'), focus-visible ring, reduced motion block"
+  - "Add track creates a track with a ready 4 bar region and selects it"
+  - "Fit, zoom, scroll slider and Home key in the roll"
+  - "Scale: 20000 notes drew and responded without visible lag"
+  - "Every edit is a command (parity with CLI and MCP), which makes an AI driven assistant feasible"
+  - "Error free flow: no modal dialogs, no forced confirmations"
+
+missing_capabilities:
+  - { item: "region drag move and resize", need: "high", note: "README known gap" }
+  - { item: "copy, paste, duplicate (notes and regions), repeat x N", need: "high", note: "F16" }
+  - { item: "loop and loop range", need: "high", note: "F03" }
+  - { item: "metronome and count in", need: "high", note: "none in source" }
+  - { item: "record from the computer keyboard or MIDI into a region", need: "high", note: "F25" }
+  - { item: "scale highlight and key selection", need: "high", note: "F10" }
+  - { item: "chord helper (pick a chord, drop notes)", need: "medium", note: "good for film style harmony" }
+  - { item: "track volume, pan, mute, solo", need: "high", note: "F05" }
+  - { item: "sound browser with categories and preview", need: "high", note: "F07, catalogue slot is disabled" }
+  - { item: "ruler click to seek", need: "high", note: "F19" }
+  - { item: "zoom to fit song in the arrangement", need: "medium", note: "F18" }
+  - { item: "templates (film cue, ambient pad, piano ballad)", need: "medium", note: "beginner starting points" }
+  - { item: "help overlay and shortcut sheet", need: "medium", note: "F39" }
+  - { item: "tempo and time signature editing over time", need: "medium", note: "F14" }
+  - { item: "MIDI file import", need: "medium", note: "F23" }
+  - { item: "velocity editing by drag with visible values", need: "low", note: "the strip exists but is unlabeled" }
+  - { item: "reverb and effects, master volume", need: "medium", note: "ambient needs space" }
+  - { item: "follow playhead toggle", need: "low", note: "long pieces scroll away" }
+  - { item: "split region and quantize", need: "low", note: "later" }
+  - { item: "ambient helpers: slow evolving generators, long fades", need: "low", note: "one hour track goal" }
+
+top_15_by_value_per_effort:
+  - { rank: 1, id: F16, why: "Copy, paste and duplicate unblock arrangement. Size L but highest value; split into notes first (M)" }
+  - { rank: 2, id: F19, why: "Ruler click to seek is small and constantly used" }
+  - { rank: 3, id: F10, why: "Scale highlight makes first melodies sound right" }
+  - { rank: 4, id: F01, why: "First run card tells beginners what to do" }
+  - { rank: 5, id: F03, why: "Loop toggle for the selected region" }
+  - { rank: 6, id: F05, why: "Mute, solo, volume per track" }
+  - { rank: 7, id: F17, why: "Region drag and resize" }
+  - { rank: 8, id: F07, why: "Sound browser with a first set of real sounds" }
+  - { rank: 9, id: F22, why: "Say that the project autosaves, rename Save to Save to file" }
+  - { rank: 10, id: F29, why: "Space on a focused button must activate it (accessibility bug, size S)" }
+  - { rank: 11, id: F39, why: "Help and shortcut overlay" }
+  - { rank: 12, id: F40, why: "Plain snap labels and an Off choice" }
+  - { rank: 13, id: F14, why: "Editable time signature" }
+  - { rank: 14, id: F18, why: "Arrangement zoom to fit and scrollbar" }
+  - { rank: 15, id: F06, why: "Undo toast after deleting a track" }

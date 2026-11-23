@@ -1,0 +1,308 @@
+# Verified reference map of Ardour: scripting and command surface, undo, and scale behavior.
+# Paths in src: are relative to the clone root <reference checkout>/ardour. Facts only from reading code.
+# Behavior is described, not copied. Source is GPL: reimplement from understanding (see meta.license).
+# Scope: Lua bindings, MCP surface, undo model, playlists and regions, disk streaming. Not covered:
+# audio graph internals, plugin hosting, GUI code beyond what scripts reach.
+
+meta:
+  clone_commit: 69428140b51be5bd9e882b9434008acc01cece9d
+  clone_kind: "Full shallow clone (depth 1) of branch master, about 160 MB."
+  license:
+    value: GPL-2.0-or-later (project COPYING is GPL v2; file headers say version 2 or later)
+    src: [COPYING:1-3, libs/surfaces/mcp_http/mcp_http_server.cc:2-6]
+    note: "Strong copyleft. Do not copy code. Vendored Lua and the LuaBridge binding library carry their own licences (not read here)."
+  languages:
+    - "C++ (libs/ardour, libs/pbd, libs/temporal, libs/surfaces)"
+    - "Lua 5.3 vendored in libs/lua, with LuaBridge for bindings"
+    - "Lua scripts in share/scripts (about 180 files)"
+  layout:
+    libs_pbd: "Foundation: ids, properties, signals, command and undo classes, event loop."
+    libs_ardour: "The engine and session model: Session, Route, Track, Playlist, Region, Butler, DiskReader, DiskWriter, luabindings."
+    libs_surfaces: "Control surfaces. Includes osc, websockets, mackie, and a new mcp_http surface."
+    share_scripts: "Lua scripts by type, see scripting_surface.script_types."
+    luasession: "Standalone interpreter binary with the engine linked but no GUI (headless scripting)."
+    session_utils: "Small command line tools built on libardour using a dummy audio backend."
+  src_layout: [libs/, share/scripts/README:1-30, luasession/luasession.cc:405-445, session_utils/README:1-15]
+  version_note: "Session model changed recently to a time domain aware timeline (libs/temporal, timepos_t, timecnt_t). Older docs and scripts may show sample-based positions."
+
+scripting_surface:
+  summary: "The engine objects are exposed to Lua through generated C++ bindings. A script can walk the session, change anything the C++ class exposes, and wrap changes in the same undo transactions the GUI uses. The same bindings are loaded in three places: the GUI, the headless interpreter, and the realtime DSP script processor (a restricted subset)."
+  binding_sets:
+    fact: "The binding code is split into functions: standard containers and types, common (most of the model), dsp (the safe subset for realtime processing), non-realtime (session lifecycle and extras), and OSC. The headless interpreter loads all but dsp. A script plugin that runs in the audio thread gets only the dsp set."
+    src: [libs/ardour/luabindings.cc:476-560, libs/ardour/luabindings.cc:3552-3560, libs/ardour/luabindings.cc:3634-3700, luasession/luasession.cc:405-430]
+    tags: [borrow]
+  binding_style: "About 140 class registrations in one file of 3700 lines, listing methods one by one by hand. Shared pointers are bound as weak or shared pointer wrappers so scripts hold safe references. Casting helpers (to_track, to_audioplaylist) stand in for inheritance."
+  src_style: [libs/ardour/luabindings.cc:550-575, libs/ardour/luabindings.cc:1557-1600]
+  tags_style: [rethink]
+  what_is_exposed:
+    - "Session: transport requests (locate, roll, stop, loop), sample rate, routes and tracks lists, markers, regions, playlists, history control."
+    - "Playlist and Region editing: add, remove, split, duplicate, cut, raise and lower layers, combine, set position."
+    - "Route and Processor: create tracks and busses, insert plugins, set parameters, connect ports."
+    - "A selection object and an Editor object, available only when running inside the GUI (not in the headless interpreter)."
+    - "Helper API in lua_api.cc: build plugins from names, create Lua DSP processors, set processor parameters, file path helpers, monotonic time, sleep."
+  src_exposed: [libs/ardour/luabindings.cc:1514-1560, libs/ardour/luabindings.cc:1677, libs/ardour/luabindings.cc:3192-3260, libs/ardour/lua_api.cc:78-232, libs/ardour/lua_api.cc:376, gtk2_ardour/luainstance.cc:813-1000]
+  what_is_not_scriptable:
+    - "Anything the authors did not bind: each method is opt in. Some are explicitly left out with a code comment (for example a playlist method that returns a pair, a split that needs a type not yet bound, copy and paste of playlists)."
+    - "GUI only operations in a headless run (editor selection, dialogs)."
+    - "In the DSP (realtime) context: file I/O, process execution, OS access."
+  src_not: [libs/ardour/luabindings.cc:1585-1595, libs/ardour/luabindings.cc:3552-3560, libs/lua/luastate.cc:98-105]
+  script_types:
+    fact: "Scripts declare a type in a header table: DSP (audio processor), Session (runs at session level), EditorHook (callback on named engine signals), EditorAction (a user triggered action with typed parameters), Snippet (interactive only), SessionInit and session setup (run when creating a session). A script file defines a factory function that returns the actual callable, so parameters are bound at load. EditorAction scripts may declare a parameter schema (title, default) that the host turns into a dialog."
+    src: [libs/ardour/ardour/luascripting.h:30-65, share/scripts/README:1-30, share/scripts/_insert_region_gaps.lua:1-30, share/scripts/_hook_test.lua:1-30]
+    tags: [borrow]
+  discovery: "The host finds scripts by scanning script directories, loads each one inside a throwaway sandboxed interpreter just to read its header and parameter schema, then caches info keyed by file hash."
+  src_discovery: [libs/ardour/luascripting.cc:187-200, libs/ardour/luascripting.cc:394-420, libs/ardour/luascripting.cc:482-520]
+  tags_discovery: [borrow]
+  hooks: "An EditorHook script lists the signals it wants (solo changed, region property changed, session load and others). The host delivers a signal id plus object reference plus arguments to the script's function. Hooks are the observer side of the API."
+  src_hooks: [share/scripts/_hook_test.lua:1-40]
+  tags_hooks: [borrow]
+  sandbox:
+    fact: "Interpreters can be created with a sandbox flag. The sandbox removes loading of other files, package access, the debug library, raw table access and coroutines. A stricter realtime flag also removes the OS and IO libraries. The unsandboxed interpreter used by the GUI console and the headless run only removes process exit and locale change."
+    src: [libs/lua/luastate.cc:29-40, libs/lua/luastate.cc:98-105]
+    note: "This is a convenience sandbox, not a security boundary: scripts that are not sandboxed can still run shell commands (there is an example script that does)."
+    src_exec: share/scripts/_system_exec.lua
+    tags: [rethink]
+  headless_run:
+    fact: "luasession is a standalone interpreter that creates or loads a session without a GUI, binds the full non realtime API, and exposes create_session, load_session, close_session, sleep and quit as globals. This is the scripting path for batch and CI work. It needs an audio backend (the dummy backend is used in session_utils)."
+    src: [luasession/luasession.cc:225-345, luasession/luasession.cc:405-445, session_utils/README:1-15]
+    tags: [borrow]
+  threading_note: "GUI scripts run in the UI thread. Heavy loops block the UI. A benchmark script shows the pattern: many split operations in a loop, each wrapped in its own transaction, then measuring the time per step."
+  src_thread: share/scripts/_split_benchmark.lua:1-50
+  tags_thread: [rethink]
+
+command_and_undo_model:
+  summary: "Ardour has no single typed command registry. The undo system works at the level of object property diffs, not named user commands. A transaction is a named list of diff commands, built by the caller between begin and commit."
+  transaction:
+    fact: "begin_reversible_command(name) opens one transaction on the session. Edits add commands into it. commit_reversible_command(cmd) pushes the whole transaction to the history. abort drops it. If a transaction is already open, a second begin aborts BOTH and logs a warning, even though the doc comment says begin and commit may nest."
+    src: [libs/pbd/history_owner.cc:35-160, libs/pbd/pbd/history_owner.h]
+    tags: [borrow, avoid]
+    note_borrow: "One named transaction per user level action is the right unit."
+    note_avoid: "Failing a nested begin by aborting everything is hostile to scripts and AI callers. Our API should support real nesting or a explicit conflict error that does not destroy the outer work."
+  diff_commands:
+    fact: "The standard edit recipe is: call clear_changes on the object (a region, a playlist, a route), mutate it directly, then create a diff command from the object. The diff records only which properties changed, with old and new values, so undo and redo swap them. If the diff is empty the transaction can be aborted. A script cannot construct commands itself (it would double free); it must use the session helper that creates the diff command."
+    src: [libs/pbd/stateful_diff_command.cc:30-130, libs/ardour/luabindings.cc:571-595, share/scripts/_insert_region_gaps.lua:30-70, share/scripts/_split_benchmark.lua:13-32]
+    tags: [borrow]
+    quirk: "Mutation happens BEFORE the command exists. Between the mutation and the commit the model is live and visible to the audio side. There is no draft state."
+    tags_quirk: [avoid]
+  history:
+    fact: "The history is two lists, undo and redo. Adding a new transaction clears the redo list. A depth setting limits the undo list: when full the oldest transaction is deleted. Undo and redo accept a count n. Signals fire before and after an undo or redo run so the UI can freeze updates."
+    src: [libs/pbd/undo.cc:195-300, libs/pbd/pbd/undo.h:68-120]
+    tags: [borrow]
+    gap: "Undo is a plain stack of whole transactions. There is no branching, no named checkpoints, no collapse of repeated edits into one entry besides what the caller does."
+    tags_gap: [rethink]
+  history_save: "The history can be serialized (get_state with a depth) and is cleared on session close or load in places. Whether history persists across restarts is not verified (see unverified)."
+  src_history_clear: [libs/ardour/session.cc:730, libs/ardour/session.cc:5156]
+  not_everything_is_undoable:
+    fact: "Many operations are direct setting changes with no transaction: fader, pan, mute, solo, record arm, transport. The MCP surface reflects this: only 17 begin calls appear in an 8000 line server that implements about 110 tools, mostly markers, region edits and MIDI notes."
+    src: [libs/surfaces/mcp_http/mcp_http_server.cc:1889, libs/surfaces/mcp_http/mcp_http_server.cc:4619-4950, libs/surfaces/mcp_http/mcp_http_server.cc:7086-7273, libs/surfaces/mcp_http/tools_json.inc]
+    tags: [avoid]
+  realtime_commands: "Transport and some graph changes go through a pool of preallocated event objects pushed to the process thread, which runs them at a safe point in the next cycle. Allocation of events is per thread pool, so non-realtime threads must create their own pool first."
+  src_rt: [libs/ardour/session_events.cc:39-80, libs/ardour/session_process.cc:895-930, libs/ardour/session_process.cc:1059]
+  tags_rt: [borrow]
+
+mcp_surface:
+  summary: "A recent experimental control surface (copyright 2026) runs an HTTP server inside Ardour that speaks the MCP tool protocol, so an AI client can drive a session. It is the closest thing in the references to our AI drivable command API."
+  src: [libs/surfaces/mcp_http/README.md:1-60, libs/surfaces/mcp_http/mcp_http_server.cc:8000-8100, libs/surfaces/mcp_http/tools_json.inc]
+  size: "About 114 declared tools in a 94 KB static JSON schema file plus an 8100 line server source."
+  tool_shape: "Tools are named in a noun then verb slash form (tracks/list, region/split, midi_note/import_json), with aliases for clients that dislike slashes. Each tool has a JSON schema with additionalProperties false. Results include human text plus a structured object."
+  src_shape: [libs/surfaces/mcp_http/README.md:25-35, libs/surfaces/mcp_http/tools_json.inc:1-60, libs/surfaces/mcp_http/mcp_http_server.cc:7255-7285]
+  tags_shape: [borrow]
+  bulk_tool: "A bulk note tool imports and exports MIDI notes as JSON with region relative bar, beat and tick fields and a repeat shorthand, so an AI can write a bar once and copy it. The README spends most of its words explaining time conventions and defaults (drum channel, note length) because the model gets them wrong otherwise."
+  src_bulk: libs/surfaces/mcp_http/README.md:120-150
+  tags_bulk: [borrow]
+  ids: "Objects are addressed by numeric string ids. A documented bug: a non-numeric id was parsed by the core ID class without failing, which resolved to an unrelated route. The surface now rejects non-decimal ids before lookup, but the core class is still not fail-closed."
+  src_ids: [libs/surfaces/mcp_http/ISSUES.md:1-70]
+  tags_ids: [avoid]
+  threading: "The server runs on its own thread and edits the session directly from there. Only the plugin add path on macOS is bounced to the UI event loop with a cv wait. After plugin moves the code polls in a loop (sleeping 2 ms, with a deadline) until the engine has applied the change. That is polling for eventual consistency instead of a completion signal."
+  src_thread: [libs/surfaces/mcp_http/mcp_http_server.cc:2310-2360, libs/surfaces/mcp_http/mcp_http_server.cc:5385-5420, libs/surfaces/mcp_http/mcp_http_server.cc:3095-3110]
+  tags_thread: [avoid]
+  auth: "No authentication or token handling was found; the README binds to the loopback address and a configurable port. Treat as local trust only."
+  src_auth: libs/surfaces/mcp_http/README.md:15-25
+  tags_auth: [rethink]
+  structure_problem: "All tools live in one very large file with no shared command layer: the GUI actions, Lua bindings, OSC surface and MCP tools are four different implementations of the same edits (e.g. region split exists in the Lua API, in the editor and in MCP, each wrapping begin/diff/commit by hand)."
+  src_dup: [libs/surfaces/mcp_http/mcp_http_server.cc:7255-7285, share/scripts/_split_benchmark.lua:13-32]
+  tags_dup: [avoid]
+
+playlists_and_regions_scale:
+  summary: "Tracks reference playlists, playlists hold regions, regions reference sources (files). Playback reads through the playlist, resolving layers on the fly. The structures are simple lists and scale with region count in code paths that scan all regions."
+  playlist_storage:
+    fact: "A playlist keeps its regions in a position sorted linked list, plus a set of all regions ever added. Adding a region inserts by upper bound (linear for a list). Point queries (regions at a time, count at a time) loop over the whole list under a reader lock. Several range queries are also linear scans."
+    src: [libs/ardour/playlist.cc:770-800, libs/ardour/playlist.cc:1799-1840, libs/ardour/playlist.cc:1956-1990, libs/ardour/ardour/playlist.h:345-360]
+    tags: [avoid]
+    note: "Fine for hundreds of regions, a risk for tens of thousands in one track. Our region store should be an interval tree or sorted vector with binary search."
+  layering: "Relayering divides the playlist's time into 512 divisions to avoid comparing each region against all others. It is skipped while loading state."
+  src_layer: libs/ardour/playlist.cc:2631-2660
+  tags_layer: [borrow]
+  locking: "Reads use a reader writer lock around the region list; writes use a writer lock with change notifications batched until the lock ends (a thaw list). Region and playlist changes emit signals the disk readers listen to."
+  src_lock: [libs/ardour/ardour/playlist.h:310-340, libs/ardour/playlist.cc:770-790]
+  tags_lock: [borrow]
+  audio_read_path: "To read a block the audio playlist takes the reader lock, collects regions touching the range, sorts them by descending layer then position, and builds a list of segments to read, subtracting the ranges already fully covered by higher layers. Muted regions are skipped. Fades are accounted when computing what still needs reading. This is a top-down visibility resolve, not mix-then-sum, so hidden lower layers are not read."
+  src_read: [libs/ardour/audio_playlist.cc:176-290]
+  tags_read: [borrow]
+  comment_realtime: "The code comment says this read is never called from a realtime thread and it is fine to block briefly. It runs in the disk thread."
+  src_comment: libs/ardour/audio_playlist.cc:205-209
+
+disk_streaming:
+  summary: "Playback and recording never touch files from the audio callback. A background disk thread (the butler) keeps ring buffers per track filled ahead of the playhead and drains capture buffers to disk."
+  butler:
+    fact: "One thread loop. It waits for run, pause or quit requests on a pipe. Each pass it does outstanding transport work first (stop, locate), then refills each active track's read ring buffer, then flushes capture buffers, repeating while any track reports unfinished work. Inactive tracks are skipped. After finishing it signals paused and refreshes the free disk space. If a write error happens during recording it requests a transport stop to save what it can."
+    src: [libs/ardour/butler.cc:187-370]
+    tags: [borrow]
+  parallel_refill: "Per track refills are pushed into a task list that runs them in parallel on a pool, then the butler waits for the pool before looking for more work."
+  src_parallel: libs/ardour/butler.cc:290-325
+  tags_parallel: [borrow]
+  buffer_sizes:
+    fact: "Three presets of read chunk, write chunk and buffer seconds: small (65536 and 65536 samples, 5 seconds), medium (262144 read, 131072 write, 10 seconds), large (524288 read, 131072 write, 20 seconds). Each reader's ring buffer is at least twice the chunk size or the configured playback seconds, per channel."
+    src: [libs/ardour/disk_io.cc:100-146, libs/ardour/disk_reader.cc:114, libs/ardour/disk_reader.cc:278]
+    tags: [borrow]
+    scale_note: "Memory per track is roughly channels times seconds times sample rate times four bytes. At 64 tracks stereo with a 20 second buffer at 48 kHz that is about 490 MB, so the large preset is a memory choice and needs a global budget."
+  edits_during_playback:
+    fact: "When a playlist changes while rolling, the reader does not discard its ring buffer. It records the current playhead and read offset atomically, then the butler overwrites the part of the buffer ahead of the playhead with freshly resolved data, using a combined overwrite reason bit mask (playlist modified, playlist changed, loop disabled). This gives live edits without a gap."
+    src: [libs/ardour/disk_reader.cc:278-310, libs/ardour/disk_reader.cc:594-770]
+    tags: [borrow]
+  midi_note: "MIDI uses a ring buffer of events per track, one MIDI stream per disk processor. Not read in depth."
+  src_midi: libs/ardour/disk_io.cc:188-192
+
+persistence:
+  session_file: "The whole session model is one XML tree rewritten on each save: written to a temporary file then renamed over the real one. Snapshots are additional XML files. Pending saves (autosave) go to a separate pending file and can create a backup copy. Audio stays in source files outside the XML."
+  src: [libs/ardour/session_state.cc:536-545, libs/ardour/session_state.cc:692-760, libs/ardour/session_state.cc:930-985]
+  tags: [rethink]
+  scale_note: "Full rewrite per save is O(session size). Large sessions with many regions mean slow saves and slow loads, which is why we plan an incremental, append friendly store."
+  tags_scale: [rethink]
+
+known_limits_observed_in_code:
+  - fact: "Disk I/O processor supports zero or one MIDI stream per track."
+    src: libs/ardour/disk_io.cc:149-158
+    tags: [rethink]
+  - fact: "Lua binding file lists every method by hand, so API drift and omissions are the norm. Comments in the binding file say some functions are left unbound because their types are not bound."
+    src: libs/ardour/luabindings.cc:1585-1595
+    tags: [avoid]
+  - fact: "Script benchmark exists because per-split cost matters. It splits at every timecode frame across all tracks and prints time per step, which suggests region operations were a hotspot."
+    src: share/scripts/_split_benchmark.lua:1-50
+    tags: [borrow]
+  - fact: "A reference to a deleted region held by a script is not safe unless the binding uses weak pointers. The binding layer is written around shared and weak pointers for that reason."
+    src: libs/ardour/luabindings.cc:550-575
+    tags: [borrow]
+
+we_call_it:
+  - their: Session
+    ours: project
+  - their: Route / Track / Bus
+    ours: track / bus (one entity with a kind)
+  - their: Playlist
+    ours: clip lane (ordered clips of one track, with layers)
+  - their: Region
+    ours: clip
+  - their: Source
+    ours: audio asset
+  - their: Butler
+    ours: stream loader (background refill and flush worker)
+  - their: DiskReader, DiskWriter
+    ours: track reader, track recorder
+  - their: reversible command / UndoTransaction
+    ours: edit group (one undo step)
+  - their: StatefulDiffCommand
+    ours: property diff (old and new values per changed field)
+  - their: clear_changes then diff
+    ours: begin snapshot, compute patch
+  - their: EditorAction, EditorHook, DSP script
+    ours: user action, event listener, processor script
+  - their: Lua binding
+    ours: scripting API
+  - their: MCP surface
+    ours: AI command server (a client of the command API, not a separate implementation)
+
+lessons:
+  - id: A01
+    tag: borrow
+    lesson: "Make the unit of undo a named group of property diffs with old and new values. Our command API produces the diff automatically from the document change, not by hand per command. Groups are the same object the scripting API and AI use."
+    src: [libs/pbd/stateful_diff_command.cc:30-130, libs/pbd/history_owner.cc:35-160]
+  - id: A02
+    tag: avoid
+    lesson: "Do not mutate the live model and then build the undo record. Build a command, validate, apply atomically, record the inverse. Ardour's order makes failures half-applied and makes concurrent callers (script and UI) interleave."
+    src: [share/scripts/_insert_region_gaps.lua:30-70]
+  - id: A03
+    tag: avoid
+    lesson: "Do not abort an open transaction when a second begin arrives. Support nesting by depth counter, or return a typed conflict error. A script or an AI call must never be able to destroy an outer undo group."
+    src: [libs/pbd/history_owner.cc:68-100]
+  - id: A04
+    tag: avoid
+    lesson: "Do not keep four implementations of the same edit (GUI action, Lua API, OSC, MCP). One command layer, many thin clients. This is already our proposed architecture; Ardour is the evidence for why."
+    src: [libs/surfaces/mcp_http/mcp_http_server.cc:7255-7285, share/scripts/_split_benchmark.lua:13-32]
+  - id: A05
+    tag: borrow
+    lesson: "Describe every command with a JSON schema (additionalProperties false), a title and short text, and return both text and a structured object. Schema first is what lets AI clients and CLI help share one source."
+    src: [libs/surfaces/mcp_http/tools_json.inc:1-60]
+  - id: A06
+    tag: borrow
+    lesson: "Offer a bulk, round trip friendly note format (get as JSON, import as JSON, with a repeat shorthand) and document the time and default conventions in plain words next to it. Good defaults are written in the README because the AI guesses otherwise."
+    src: [libs/surfaces/mcp_http/README.md:120-150]
+  - id: A07
+    tag: avoid
+    lesson: "Do not accept loosely parsed ids. Validate ids strictly (type and format) before lookup, and return a typed not found error. A lookup that silently resolves to something else is the worst failure for an AI caller."
+    src: [libs/surfaces/mcp_http/ISSUES.md:1-70]
+  - id: A08
+    tag: avoid
+    lesson: "Do not poll with sleeps to learn whether a command took effect. Commands return a result after the engine applied them, or return an operation id plus an event. Our command API should be request and reply with a revision number."
+    src: [libs/surfaces/mcp_http/mcp_http_server.cc:2310-2360]
+  - id: A09
+    tag: borrow
+    lesson: "Offer a headless runner that loads a project and executes a script or command list with no GUI, sharing the exact same bindings. It makes CLI, CI and AI tests the same code path."
+    src: [luasession/luasession.cc:405-445, session_utils/README:1-15]
+  - id: A10
+    tag: borrow
+    lesson: "Script discovery and metadata: scripts declare a type and a parameter schema in a header, a host loads them in a throwaway sandbox to read it, and caches by hash. Use the same pattern for user macros and AI generated macros: declared inputs, no side effects at load."
+    src: [libs/ardour/luascripting.cc:187-200, libs/ardour/luascripting.cc:482-520]
+  - id: A11
+    tag: rethink
+    lesson: "Scripting language sandbox is advisory. If user or AI scripts run in our app, run them as commands against the API in an isolated runtime with no OS access by construction (a WASM or JS realm with only our API injected), not by deleting globals."
+    src: [libs/lua/luastate.cc:98-105, share/scripts/_system_exec.lua]
+  - id: A12
+    tag: borrow
+    lesson: "Streaming rule: never read files in the audio callback. A background loader keeps per track ring buffers ahead of the playhead, works by chunk, defers to transport work first, and refills tracks in parallel."
+    src: [libs/ardour/butler.cc:187-370]
+  - id: A13
+    tag: borrow
+    lesson: "When clips change during playback, patch the read ahead buffer in place from the playhead onward rather than flushing and refilling. Record the playhead and ring offset together atomically, and combine reasons in a bit mask."
+    src: [libs/ardour/disk_reader.cc:594-770]
+  - id: A14
+    tag: borrow
+    lesson: "Top-down visibility resolve for overlapping clips: sort by layer, subtract covered ranges, read only the visible parts, skip muted clips. It bounds disk reads on stacked takes."
+    src: [libs/ardour/audio_playlist.cc:176-290]
+  - id: A15
+    tag: avoid
+    lesson: "Do not store clips as a linear list with linear point queries. Use an ordered structure with interval queries so that a track with tens of thousands of clips stays responsive. Our scale budgets (bench) should include one such track."
+    src: [libs/ardour/playlist.cc:770-800, libs/ardour/playlist.cc:1799-1840]
+  - id: A16
+    tag: rethink
+    lesson: "Rewriting a whole XML project on each save does not scale to huge arrangements. Use an incremental change log plus periodic compaction (the same diffs that feed undo), and write atomically."
+    src: [libs/ardour/session_state.cc:930-985]
+  - id: A17
+    tag: rethink
+    lesson: "Buffer sizing as a few presets in seconds is easy to understand but needs a global memory budget across tracks and a low-memory path for browsers. Make read ahead dynamic by track count and tab memory and take the numbers from config."
+    src: [libs/ardour/disk_io.cc:100-146, libs/ardour/disk_reader.cc:114]
+  - id: A18
+    tag: avoid
+    lesson: "Do not make undoability depend on which client made the change. In Ardour the fader, mute and transport edits are not undoable but clip edits are, and the MCP tools inherit that split. State clearly which commands are undoable (document edits) and which are session state (transport, monitoring) in the command schema."
+    src: [libs/surfaces/mcp_http/mcp_http_server.cc:4619-4950, libs/surfaces/mcp_http/README.md:25-90]
+
+unverified:
+  - topic: history persistence
+    what: "Whether the undo history is written to disk and restored on load. Only get_state and clearing calls were seen."
+    src_hint: [libs/pbd/undo.cc, libs/ardour/session.cc:730]
+  - topic: MCP tool count and exact undo coverage
+    what: "114 counted from name fields in the schema file, which may include nested names. Only 17 explicit begin calls were counted by text search, other tools may delegate to helpers that open transactions."
+  - topic: GUI thread and Lua
+    what: "Scripts are assumed to run on the GUI thread from the console and action paths. The exact dispatcher was not traced."
+  - topic: documented limits on large sessions
+    what: "The manual is not in the clone (online). No numeric limits for region or track counts were found in code comments. Only structure was inferred (linear scans, per track buffers)."
+  - topic: peak files and waveform caches
+    what: "How overview peaks are built and stored for long audio was not read."
+  - topic: crossfade and fade cost on dense layers
+    what: "Region fade handling in the read path was seen only at a high level."
+  - topic: tempo and time domain behavior in scripts
+    what: "Position types (timepos_t) mix audio time and music time. Behavior of edits across tempo changes was not read."
+  - topic: osc and websockets surfaces
+    what: "Present under libs/surfaces but not read; may show how remote clients subscribe to changes."
+  - topic: licence of vendored Lua and LuaBridge
+    what: "Directory contents were not checked for notices."

@@ -1,0 +1,1801 @@
+# UI component inventory and build order for the composer web app (R04, lane research).
+# Source of facts about the reference: the openDAW studio UI (AGPL) read directly, plus notes/ref-opendaw-ui.yaml (R01).
+# Source of facts about our app: web/app/src at wave/1 plus core/composer-commands/src/describe.rs (commands) and notes/ui-plan.yaml.
+# Rule: behavior in our words only, no code copied. Our names live in glossary (we_call_it).
+#
+# Path shorthand: "ui/..." means packages/app/studio/src/ui/... inside <reference checkout>/opendaw.
+# Other prefixes are written in full. Every component has ref_src (the entry's src: path and lines).
+# Per component fields: we_call_it, purpose, behavior (states, edge cases), avoid (what not to copy),
+# ref_src, ours {status have|partial|missing, files, note}, priority (P0 beginner blocker, P1, P2),
+# needs_command_api, ui_plan_task (existing U id or null), tag (borrow|avoid|rethink).
+meta:
+  id: R04
+  date: 2026-11-23
+  author_lane: research
+  owner_complaint: "The app lacks a left side bar for sounds and many other components."
+  inputs_read: ["notes/ref-opendaw-ui.yaml", "notes/ui-plan.yaml", "notes/ui-audit.yaml (headings)", "notes/tasks.yaml", "notes/decisions.yaml (status of D19 to D34)", "web/app/src (ui, roll, state, mixer)", "openDAW ui/browse, ui/devices, ui/header, ui/timeline, ui/mixer, ui/components, ui/software-midi, ui/piano-panel, ui/dashboard, service/StudioMenu.ts, manual pages"]
+  not_done: ["Did not run the reference app this time (R01 did, see its live: facts).", "Did not read the .sass files, so exact sizes, colors and spacing of the reference are not recorded (not needed, our tokens differ).", "Did not run our app; our status comes from reading source and the e2e script names."]
+  reading_the_reference_gap: "In the reference the left browser holds ONLY Samples and Soundfonts (two tabs). Instruments and effects are chosen in a modal picker dialog, and presets sit behind a folder icon in each device header. So the reference does not have a left sound browser for instruments; our sidebar is a deliberate step beyond it (owner wants it, Splice style)."
+
+glossary:
+  # we_call_it map, reference name on the left.
+  - ref: "browser panel (BrowserPanel, ResourceBrowser)"
+    we_call_it: "library sidebar"
+  - ref: "audio unit (one channel: instrument, effects, strip, tracks)"
+    we_call_it: "track"
+  - ref: "track inside an audio unit (notes lane, audio lane, value lane)"
+    we_call_it: "lane (a track can later own an automation lane)"
+  - ref: "region (timeline) and clip (launcher cell)"
+    we_call_it: "clip (on the timeline) and launch slot (grid cell, not planned)"
+  - ref: "device (instrument or effect), device panel, device dialog"
+    we_call_it: "sound or effect, sound panel, sound picker"
+  - ref: "preset, stock preset, user preset"
+    we_call_it: "sound variation, built in variation, my variation"
+  - ref: "sample, soundfont"
+    we_call_it: "sample file, sound bank"
+  - ref: "tape (audio track instrument)"
+    we_call_it: "audio track"
+  - ref: "spotlight"
+    we_call_it: "command palette (U21)"
+  - ref: "primary tracks (markers, tempo, signature, key, chords)"
+    we_call_it: "timeline lanes"
+  - ref: "capture MIDI"
+    we_call_it: "catch what I just played"
+  - ref: "screen / workspace layout"
+    we_call_it: "view (we keep one workspace, panels are dock tabs and the sidebar)"
+  - ref: "modulator"
+    we_call_it: "movement (slow automatic parameter change)"
+  - ref: "mastering panel, output unit"
+    we_call_it: "master strip"
+
+ranked_build_order:
+  principle: "Order by beginner blocker first, then by how many other components wait on it. Left sounds sidebar first because the owner named it and because drag and drop, context menus and the sound panel all hang off it."
+  steps:
+    - rank: 1
+      id: U31
+      what: "Library sidebar (left), Sounds scope first, resizable and collapsible, Shift+B"
+      why: "owner named blocker; sounds are today a bottom tab, away from the tracks they apply to"
+    - rank: 2
+      id: U32
+      what: "Drag and drop kit plus context menu kit (sound to track, sound to empty lane area, right click on track, clip, note)"
+      why: "makes the sidebar useful and removes hidden-gesture-only actions (principle P5)"
+    - rank: 3
+      id: U33
+      what: "Dialog kit, toast stack with Undo, Project menu (New, Open, Save, Export, Templates), unsaved work guard"
+      why: "today File actions are loose buttons, confirm and progress dialogs do not exist yet"
+    - rank: 4
+      id: U34
+      what: "Sound panel for the selected track (sound name, previous and next sound, volume, pan, reverb send, mute)"
+      why: "all needed commands already exist; fills the empty bottom area the reference calls the device panel"
+    - rank: 5
+      id: U35
+      what: "Track header v2 (inline rename, reorder by drag, duplicate, color, record arm, menu)"
+      why: "move_track and rename_track exist but have no UI; duplicate and arm are the usual beginner expectations"
+    - rank: 6
+      id: U36
+      what: "On screen keyboard, chord pads, catch what I just played"
+      why: "ideas out of the head with no MIDI device; idea 'I played something good, keep it'"
+    - rank: 7
+      id: "U37 then U38"
+      what: "Automation: core commands first, then lane editor and right click Automate on a control"
+      why: "swells and filter moves are central to cinematic and long ambient; no command exists today"
+    - rank: 8
+      id: U39
+      what: "Timeline lanes (markers, tempo, key) and tap tempo"
+      why: "film scoring needs tempo changes; sections lane is also the calm hour navigation (U29 uses it)"
+    - rank: 9
+      id: "U40 then U41"
+      what: "Effect chain: core commands then UI in the sound panel"
+      why: "more than reverb is needed for cinematic sound; large core work so later"
+    - rank: 10
+      id: "U42, U43, U44"
+      what: "Guided tour, preferences page with shortcut remap, loudness readout"
+      why: "polish, P2 except the tour (P1 for first run)"
+  already_in_flight_or_planned_do_not_duplicate: ["U21 history panel and command palette (running)", "U14 record (running)", "U22 change feed (running)", "U11 clipboard", "U15 plain language", "U17 roll multi select and bulk", "U19 chord strip", "U23 loop and markers core", "U29 export sheet, master strip, sections lane", "U30 project library and Open"]
+
+counts_by_status:
+  note: "Counts cover the components list below (not out_of_scope). Counted by script after writing."
+  have: 25
+  partial: 22
+  missing: 46
+  total: 93
+
+# ---------------------------------------------------------------------------------------------
+# Components not covered by any existing U task (ui_plan_task null) and the proposed new tasks.
+# Shape follows notes/ui-plan.yaml tasks. Waves: 2 for U31 to U36, 3 for U37 to U41, 4 for U42 to U44.
+# ---------------------------------------------------------------------------------------------
+uncovered_components:
+  - library_sidebar
+  - library_sidebar_samples_scope
+  - library_row_selection_model
+  - drag_and_drop_kit
+  - context_menu_kit
+  - panel_layout_horizontal_split
+  - panel_toggle_shortcuts
+  - project_menu
+  - dialog_kit
+  - toast_stack
+  - unsaved_work_guard
+  - sound_panel
+  - sound_variation_menu
+  - on_screen_keyboard
+  - chord_pads
+  - catch_last_played
+  - track_header_inline_rename
+  - track_reorder
+  - track_duplicate
+  - track_color
+  - track_record_arm
+  - track_height
+  - clip_context_menu
+  - selection_rectangle_arrangement
+  - automation_lane_editor
+  - automation_from_control
+  - effect_chain
+  - reverb_send_strip_control
+  - tap_tempo
+  - position_readout
+  - guided_tour
+  - preferences_page
+  - shortcut_remap
+  - loudness_readout
+  - control_value_tooltip
+  - timeline_lanes
+
+proposed_tasks:
+  - id: U31
+    wave: 2
+    lane: ui
+    size: L
+    needs: [U01, U07, U05]
+    external_needs: [T21a]
+    title: Library sidebar (left), Sounds scope
+    brief:
+      files: [web/app/src/ui/Library.tsx (new), web/app/src/ui/SoundRow.tsx (new), web/app/src/ui/App.tsx, web/app/src/ui/Splitter.tsx, web/app/src/ui/Dock.tsx, web/app/src/prefs.ts, web/app/src/config.ts, web/app/src/input/keymap.ts]
+      do: "A left column beside arrangement plus dock. Icon tab strip at its top (Sounds first; Samples and Projects tabs appear when their data exists), one search box, collapsible category groups, compact rows (color dot, plain name, short description, Hear on hover, In use mark). Row click selects, Enter or double click uses the sound on the selected track (or creates a track when none), arrow keys step and audition after a short delay, Space stays transport. Width resizable by a vertical splitter, remembered, collapsible to a narrow rail, Shift+B toggles. Open by default on first run. The Sound dock tab becomes a short link that opens the sidebar. Hidden entries and pack rows keep the rules of U07."
+      exit:
+        - "npm run typecheck && npm run lint && npm test pass in web/app"
+        - "e2e library: sidebar visible on first open, search narrows the list, double click on Warm pad sets the selected track sound, one undo restores the previous sound"
+        - "e2e library-keyboard: Shift+B collapses and reopens, arrows move the selection, Enter uses the sound, Space still toggles play"
+        - "vitest: width clamps from env, collapse state persists, group and filter logic (shared with catalogue.ts)"
+  - id: U32
+    wave: 2
+    lane: ui
+    size: L
+    needs: [U31, U05]
+    external_needs: []
+    title: Drag and drop kit and context menu kit
+    brief:
+      files: [web/app/src/ui/dnd.ts (new), web/app/src/ui/ContextMenu.tsx (new), web/app/src/ui/ArrangementPanel.tsx, web/app/src/roll/ArrangementController.ts, web/app/src/state/actions.ts, web/app/src/input/keymap.ts]
+      do: "A typed drag payload union (sound, later sample, file, clip) and a target check that says before drop whether it is allowed. Sound drag goes onto a track header (set sound), a clip (sets the clip's track sound) or the empty area below the last track (new track with that sound, one group). Context menu component with keyboard operation, shortcut text on items, Escape and outside click close, long press on touch. Menus for track header, clip, note and ruler, each item calling the existing Actions method. Every menu item also exists as a button or key (P5)."
+      exit:
+        - "e2e dnd: drag a sound row onto track 2 changes its sound; drag onto empty lane area adds a track with that sound; both are one undo step"
+        - "e2e menu: right click a clip, choose Split, then Escape closes any open menu, menus are reachable by keyboard (Shift+F10)"
+        - "vitest: payload accept rules per target; menu item list per context against describe() command names"
+  - id: U33
+    wave: 2
+    lane: ui
+    size: M
+    needs: [U15, U01]
+    external_needs: []
+    title: Dialog kit, toast stack and Project menu
+    brief:
+      files: [web/app/src/ui/Dialog.tsx (new), web/app/src/ui/Toasts.tsx (new), web/app/src/ui/ProjectMenu.tsx (new), web/app/src/ui/TopBar.tsx, web/app/src/ui/App.tsx, web/app/src/ui/FileDialog.tsx, web/app/src/ui/EnvDialog.tsx]
+      do: "One dialog component (headline, message, primary and secondary buttons, Escape cancels, focus returns) used by FileDialog, EnvDialog, Help and new confirm dialogs. Toast stack: a queue, 2 seconds or longer text 5 seconds from env, optional Undo action, preference to silence. Project menu replaces the loose Open and Save buttons: New, Open, Save to file, Save as template, Export audio, Export MIDI, Rename, Help. Leaving the page with unsaved changes asks via the browser prompt and a recovery copy is kept."
+      exit:
+        - "e2e dialog: confirm dialog traps focus, Escape cancels, focus returns to the opener"
+        - "e2e toast: delete a track shows a toast with Undo that restores it; two toasts stack"
+        - "vitest: toast duration rule from env; menu entries enabled state from project state"
+  - id: U34
+    wave: 2
+    lane: ui
+    size: M
+    needs: [U31, U08, U28]
+    external_needs: []
+    title: Sound panel for the selected track
+    brief:
+      files: [web/app/src/ui/SoundPanel.tsx (new), web/app/src/ui/Dock.tsx, web/app/src/state/actions.ts]
+      do: "Dock tab 'Sound' becomes this panel: big sound name with category color, previous and next sound buttons (steps through the sidebar list order for the same category, audition then keep), volume, pan, reverb send, mute, solo, and a 'Replace sound' button that opens the sidebar focused on search. Shows 'Pick a track' empty state. Reverb send is the only effect until U40."
+      exit:
+        - "e2e sound-panel: next sound changes track sound, one undo step per press; reverb send slider commits set_track_reverb_send once per release"
+        - "vitest: neighbour sound selection wraps and skips hidden entries"
+  - id: U35
+    wave: 2
+    lane: ui
+    size: M
+    needs: [U32, U05]
+    external_needs: []
+    title: Track header v2
+    brief:
+      files: [web/app/src/ui/ArrangementPanel.tsx, web/app/src/roll/ArrangementController.ts, web/app/src/state/actions.ts, web/app/src/prefs.ts]
+      do: "Inline rename by double click (rename_track), drag handle to reorder (move_track, one group), Duplicate track (group of add_track plus duplicate_region copies, new ids, same sound and mix), color chip from the sound category with a manual override stored as view state, record arm button (arming picks the record target for U14), header menu button opening the context menu from U32, track height handle (comfortable and compact steps, view state)."
+      exit:
+        - "e2e headers: reorder track 3 to position 1 is one undo step; duplicate track copies clips and the sound"
+        - "vitest: reorder index math, duplicate id remapping, height clamp from env"
+  - id: U36
+    wave: 3
+    lane: ui
+    size: M
+    needs: [U14, U19]
+    external_needs: []
+    title: On screen keyboard, chord pads, catch what I just played
+    brief:
+      files: [web/app/src/ui/ScreenKeys.tsx (new), web/app/src/ui/ChordPads.tsx (new), web/app/src/input/liveInput.ts, web/app/src/state/actions.ts, web/app/src/ui/Dock.tsx]
+      do: "Keys panel in the dock: a two octave clickable keyboard (also lights while computer or MIDI keys play), and numbered chord pads whose chords come from the project key at the playhead (theory.chords), pressed by mouse or number keys. The last N seconds of live notes are buffered per armed track; a Catch button (and shortcut) commits them as one add_notes group into a new clip at the playhead (no new command, source user)."
+      exit:
+        - "vitest with fake clock: buffer keeps only the last window from env; committed ticks match tempo"
+        - "e2e catch: play 4 synthetic notes without arming Record, click Catch, a clip with 4 notes appears, one undo step"
+  - id: U37
+    wave: 3
+    lane: core
+    size: L
+    needs: []
+    external_needs: []
+    title: Automation commands (new decision)
+    brief:
+      files: [notes/decisions.yaml (new D entry), core/composer-model/src/project.rs, core/composer-commands/src/command.rs, core/composer-commands/src/describe.rs, core/composer-engine/src/schedule.rs, core/composer-render/src/lib.rs, core/composer-wasm/src/blob.rs, core/composer-format, daemon/composerd/src/methods.rs, mcp/composer-mcp/src/tools.rs]
+      do: "A lane of points (tick, value 0 to 1000 permille, curve none, linear or curved) bound to a target (track volume, pan, reverb send, master volume first). Commands: add_automation_lane, delete_automation_lane, set_automation_point (add or move), delete_automation_point, set_point_curve. Engine and offline render apply the value per block, deterministic, no allocation. Additive only: no lane means no change to existing state_hash."
+      exit:
+        - "cargo test for model, commands, engine, render, wasm, format, composerd, composer-mcp pass; demo hash unchanged"
+        - "render of a 2 minute fade matches wasm output bit for bit"
+  - id: U38
+    wave: 3
+    lane: ui
+    size: L
+    needs: [U37, U32, U35]
+    external_needs: []
+    title: Automation lane editor and Automate from a control
+    brief:
+      files: [web/app/src/roll/AutomationController.ts (new), web/app/src/ui/ArrangementPanel.tsx, web/app/src/ui/mixer/StripSlider.tsx, web/app/src/ui/MixSlider.tsx, web/app/src/state/commands.ts]
+      do: "Right click (and a visible small button) on volume, pan and send controls: Automate. A lane appears under the track with a header naming the parameter and a collapse toggle. Gestures: double click adds or removes a point, drag moves, Shift click on a segment cuts, Alt drag draws a line of points, curve menu none, linear, curve. Each gesture has a menu item. Automated controls show an indicator and a Remove automation item. Values show a tooltip while dragging."
+      exit:
+        - "e2e automation: Automate volume, add 3 points by double click, play and meter level follows the line, one undo per gesture"
+        - "vitest: hit tests, snap in time, value mapping from pixels to permille"
+  - id: U39
+    wave: 3
+    lane: ui
+    size: M
+    needs: [U23, U10]
+    external_needs: []
+    title: Timeline lanes (markers, tempo, key) and tap tempo
+    brief:
+      files: [web/app/src/roll/ArrangementController.ts, web/app/src/ui/ArrangementPanel.tsx, web/app/src/ui/TopBar.tsx, web/app/src/state/actions.ts]
+      do: "A menu in the arrangement tool row toggles marker, tempo and key lanes (hidden by default). Markers by double click and rename; tempo and key points by double click using the existing set_tempo and set_key with a tick. Tap tempo button in the top bar (average of the last taps, resets after a gap from env) sends set_tempo. Position readout (bars and beats plus minutes and seconds) beside the transport."
+      exit:
+        - "e2e tempo-lane: add a tempo change at bar 5 by double click, the ruler spacing changes, undo removes it"
+        - "vitest: tap average and reset gap; position readout formatting"
+  - id: U40
+    wave: 3
+    lane: core
+    size: L
+    needs: [U37]
+    external_needs: []
+    title: Effect chain commands (new decision)
+    brief:
+      files: [notes/decisions.yaml (new D entry), core/composer-model, core/composer-commands, core/composer-engine, core/composer-render, core/composer-wasm, core/composer-format, daemon/composerd, mcp/composer-mcp]
+      do: "Per track ordered chain of built in effects (start with low pass filter, delay, chorus, soft saturation, compressor) with permille parameters. Commands: add_effect, remove_effect, move_effect, set_effect_param, set_effect_bypass. Same code in render and wasm, deterministic, no allocation. Additive: empty chain changes nothing."
+      exit:
+        - "cargo test for engine, render, wasm, commands, format, composerd, composer-mcp pass; demo hash unchanged; no_alloc covers each effect"
+  - id: U41
+    wave: 3
+    lane: ui
+    size: M
+    needs: [U40, U34, U32]
+    external_needs: []
+    title: Effect chain in the sound panel
+    brief:
+      files: [web/app/src/ui/SoundPanel.tsx, web/app/src/ui/EffectSlot.tsx (new), web/app/src/state/actions.ts, web/app/src/ui/Library.tsx]
+      do: "Chain row under the sound: a plus slot between and after effects opens the sidebar on an Effects scope (new), each effect as a small card with power, name, two to four knobs as sliders, bypass, remove, reorder by drag or arrows. Same audition rule as sounds (try, keep or cancel)."
+      exit:
+        - "e2e effects: add a filter, move it before the delay, bypass it, each one undo step; sidebar Effects scope lists the built in effects"
+  - id: U42
+    wave: 4
+    lane: ui
+    size: S
+    needs: [U15, U31]
+    external_needs: []
+    title: Guided tour
+    brief:
+      files: [web/app/src/ui/Tour.tsx (new), web/app/src/ui/Help.tsx, web/app/src/session.ts]
+      do: "Eight cards max, two sentences each, a notch pointing at the target (sidebar, ruler, clip, roll, mix, export). Offered as a non modal card after the first sound, with Not now and Never show, and a Help entry to restart it (the reference has no restart, avoid that). Studio stays usable under it. Keys: arrows and Enter step, Escape closes."
+      exit:
+        - "e2e tour: runs 8 cards by keyboard only, restores any panel it opened; restart from Help works after Never show"
+  - id: U43
+    wave: 4
+    lane: ui
+    size: M
+    needs: [U33]
+    external_needs: []
+    title: Preferences page and shortcut remap
+    brief:
+      files: [web/app/src/ui/Preferences.tsx (new), web/app/src/prefs.ts, web/app/src/input/keymap.ts, web/app/src/ui/SettingsMenu.tsx, web/app/src/ui/Help.tsx]
+      do: "Settings list generated from a typed schema with defaults and plain labels (theme, density, toast on or off, follow cursor, count in, grid default, sidebar start state, latency warning threshold). Shortcut list generated from keymap.ts with remap and reset; only differences from defaults are stored, migrated by version."
+      exit:
+        - "vitest: schema defaults, diff only storage, migration keeps a user remap when the default moved"
+        - "e2e: remap Loop to another key, the help overlay and tooltip show the new key"
+  - id: U44
+    wave: 4
+    lane: ui
+    size: S
+    needs: [U29, T27]
+    external_needs: []
+    title: Loudness and level readout
+    brief:
+      files: [web/app/src/ui/mixer/Meter.tsx, web/app/src/ui/StatusBar.tsx, web/app/src/ui/Loudness.tsx (new)]
+      do: "Master strip gets an integrated loudness readout (LUFS) and true peak over the last export range, with a one line plain hint (target for video from env). Wide analysis (spectrum, scope) stays out of scope."
+      exit:
+        - "vitest: loudness of a known sine matches the expected value within 0.5 dB; export sheet shows the number"
+
+# ---------------------------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------------------------
+components:
+
+  # ===================== Shell and layout =====================
+  shell:
+    - id: library_sidebar
+      we_call_it: "library sidebar"
+      purpose: "One always reachable place to find sounds (later samples, effects, projects) and put them on tracks."
+      behavior:
+        - "Reference: a side panel with two tabs (Samples, Soundfonts) switched through one shared scope value; each tab body is rebuilt when the scope changes and its subscriptions released. Fixed width 300 px, starts collapsed as a vertical side tab in the default layout."
+        - "Reference body: a filter bar (location switch between online library and user folder, then a search box), a column header row (Name, Bpm, Sec), a scrolling list, a footer (license note, stored size link, audition volume in dB)."
+        - "Folders expand and collapse and the open set is remembered for the session; a search query flattens the tree into a name sorted match list and hides trashed items."
+        - "Our version: start OPEN on first run (the reference hides it, beginners miss it), width and open state remembered, collapses to a narrow icon rail, Shift+B toggles. Sounds scope lists categories with plain names (U07 rules), a Hear action on each row, drag out to tracks."
+        - "States: loading (list not ready, show spinner row), failed (error with Retry, the reference makes the error line clickable to retry), empty search (say so and offer Show all), nothing selected track (using a sound creates a track)."
+      avoid: ["starting collapsed", "brand names as the only label", "an online versus local switch the beginner has to understand (use Built in and Mine)"]
+      ref_src: ["ui/browse/BrowserPanel.tsx:16-56", "ui/browse/ResourceBrowser.tsx:60-129", "ui/browse/ResourceBrowser.tsx:270-329", "ui/workspace/Default.ts:6-21"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/SoundBrowser.tsx", "web/app/src/ui/Dock.tsx"]
+        note: "The content (search, categories, cards, Hear and Use, licence line) exists as the Sound tab of the bottom dock. There is no left column, no width control and no collapse rail."
+      priority: P0
+      needs_command_api: "Existing: set_track_sound (D29), add_track, sounds.list. Nothing new for the Sounds scope."
+      ui_plan_task: null
+      proposed_task: U31
+      tag: rethink
+    - id: library_sidebar_samples_scope
+      we_call_it: "samples tab of the library sidebar"
+      purpose: "Browse, audition and drag audio files (loops, one shots, field recordings) onto the timeline."
+      behavior:
+        - "Rows show name, detected tempo and length in seconds. Double click auditions (states buffering, playing, error shown on the row); starting a drag stops any audition."
+        - "Dropping a sample on a lane creates an audio clip; dropping several puts the first on the target track and gives each other its own new track. A sample with a known tempo is stretched to the project tempo automatically, one with none is placed unstretched."
+        - "Row menu: create audio track, auto chop into pads, edit in sample editor, edit name and tempo (only for user files)."
+        - "Audition volume control sits in the footer and is separate from project levels."
+      avoid: ["auto stretch with no way to see or undo it in plain words (show a 'Matched to project tempo' chip)"]
+      ref_src: ["ui/browse/SampleBrowser.tsx:40-122", "ui/browse/SampleView.tsx:34-95", "ui/browse/SampleSelection.ts:17-57", "ui/timeline/tracks/audio-unit/TimelineDragAndDrop.ts:41-122"]
+      ours:
+        status: missing
+        files: []
+        note: "Audio tracks and import are not built (T23 todo). Catalogue sample packs show as 'not ready yet' rows."
+      priority: P1
+      needs_command_api: "Gap: audio clips need an audio region model and import (T23). Until then the scope shows catalogue packs read only."
+      ui_plan_task: null
+      proposed_task: "U31 hosts the tab shell, T23 and T21a supply the data"
+      tag: borrow
+    - id: library_projects_scope
+      we_call_it: "projects and templates tab of the library sidebar"
+      purpose: "Reopen a project, start from a template or a demo without leaving the workspace."
+      behavior:
+        - "Reference lists these on a separate dashboard screen with tabs Projects, Templates, Demos. Opening a demo asks for approval and first asks about losing unsaved changes."
+        - "Ours: Start sheet already has goal cards and recents. Keep the sheet for first open; mirror the lists in the sidebar so a returning user can switch without a modal."
+      ref_src: ["ui/dashboard/Resources.tsx:60-72", "ui/dashboard/DemoProjectsList.tsx:23-50", "ui/dashboard/DemoProject.tsx:19-37"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/Start.tsx", "web/app/src/templates/index.ts"]
+        note: "Four templates and recents exist on the Start sheet; no sidebar tab, no user templates, no rename or delete."
+      priority: P1
+      needs_command_api: "library.list, rename, duplicate, delete (D30 proposed, task U30); templates.list (D28 proposed)."
+      ui_plan_task: U30
+      tag: borrow
+    - id: library_row_selection_model
+      we_call_it: "list selection model"
+      purpose: "Click, Shift click range, Ctrl click toggle in lists so drags and menus act on the right set."
+      behavior:
+        - "Reference keeps one selection object per list. A drag started on a selected row carries the whole selection; a drag on an unselected row carries only that row. The context menu targets the selection when the right clicked row belongs to it."
+        - "Keyboard: Delete removes selected user items only (never stock ones). Text inputs swallow keys."
+      ref_src: ["ui/browse/ResourceBrowser.tsx:155-161", "ui/browse/ResourceBrowser.tsx:321-328", "ui/HTMLSelection.ts", "ui/browse/ResourceSelection.ts"]
+      ours:
+        status: missing
+        files: []
+        note: "SoundBrowser has no selection, only per card buttons."
+      priority: P1
+      needs_command_api: "none (view state)"
+      ui_plan_task: null
+      proposed_task: U31
+      tag: borrow
+    - id: library_folders_and_trash
+      we_call_it: "my folders and trash in the library"
+      purpose: "Let a user organise their own samples and variations in folders, with a recoverable delete."
+      behavior:
+        - "Folders only in the user area; online items cannot be moved (a drop of files in the online area answers with a toast saying files can only be stored in the user folder). Dropping files on a folder header imports into that folder."
+        - "Trash is a special folder: Put back, Delete forever (confirm), Empty trash (confirm). A 'Move to...' submenu lists the folder tree. New and rename folder use a small name dialog with a default 'untitled folder'."
+        - "Edge: a drop that is cancelled never fires leave, so drag highlight must also be cleared on the window dragend and drop events."
+      avoid: ["permanent delete as the first choice"]
+      ref_src: ["ui/browse/ResourceMenus.ts:9-131", "ui/browse/ResourceBrowser.tsx:171-246", "ui/browse/ResourceFolderItem.tsx:21-58"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "none for the model; file operations on OPFS or the daemon files dir (D30)."
+      ui_plan_task: null
+      tag: borrow
+    - id: panel_layout_horizontal_split
+      we_call_it: "panel splitter (both directions) and collapse rails"
+      purpose: "Resize and collapse the sidebar, dock and arrangement; keep each from vanishing."
+      behavior:
+        - "Reference: each panel is either flexible with min and max or fixed. A divider moves weight only between its two neighbours and is clamped by both. Collapsed panels show a title strip or vertical tab and cannot be resized."
+        - "Ours has one vertical splitter with env limits and keyboard operation. Add a vertical divider for the sidebar with the same keyboard rules, and a collapse rail."
+        - "Edge: in a short window the reference lets the arrangement shrink to nothing; ours already keeps a minimum lane count, keep that."
+      avoid: ["no minimum for the arrangement area"]
+      ref_src: ["ui/workspace/PanelResizer.tsx:40-63", "ui/workspace/Workspace.ts:13-23", "ui/workspace/Default.ts:69-111"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/Splitter.tsx", "web/app/src/ui/App.tsx"]
+        note: "Arrangement versus dock only, keyboard operable, remembered. No sidebar splitter, no rails."
+      priority: P0
+      needs_command_api: "none (view state)"
+      ui_plan_task: null
+      proposed_task: U31
+      tag: borrow
+    - id: panel_toggle_shortcuts
+      we_call_it: "panel toggle keys"
+      purpose: "Show or hide sidebar, editor and sound panel from the keyboard."
+      behavior:
+        - "Reference: Shift+B browser, Shift+E editor, Shift+D devices, and per lane toggles. Toggling remembers size."
+        - "Ours: Shift+B sidebar, Shift+E Notes tab, Shift+D Sound tab, listed in the help overlay and menus."
+      ref_src: ["ui/shortcuts/GlobalShortcuts.ts:62-97"]
+      ours:
+        status: missing
+        files: ["web/app/src/input/keymap.ts"]
+        note: "keymap.ts exists and feeds Help; no panel keys yet."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U31
+      tag: borrow
+    - id: named_screens
+      we_call_it: "views (not planned)"
+      purpose: "Reference switches between whole layouts (arrangement, mixer, modulation, piano tutorial, project info, shader, code, tap tempo)."
+      behavior:
+        - "We keep one workspace; the Mix tab replaces the mixer screen. Screens add concepts a beginner must learn."
+      avoid: ["eight screens with icons as the main way to find the mixer"]
+      ref_src: ["ui/workspace/Default.ts:54-291", "ui/header/Header.tsx:35-45", "ui/header/Header.tsx:126-150"]
+      ours:
+        status: missing
+        files: []
+        note: "Deliberately replaced by dock tabs (ui-plan information_architecture)."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      tag: rethink
+    - id: popout_panels
+      we_call_it: "pop out to a window"
+      purpose: "Move a panel to a second window."
+      behavior:
+        - "640 by 480 popup, popup blocker dialog on failure, one instance in one place. Useful on two monitors only."
+      ref_src: ["ui/workspace/PanelContent.tsx:92-120", "ui/workspace/PanelPlaceholder.tsx:142-146"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      tag: avoid
+    - id: top_bar_and_project_menu
+      we_call_it: "top bar with Project menu"
+      purpose: "Reach New, Open, Save, Save as template, Import, Export from one menu; keep the bar for transport."
+      behavior:
+        - "Reference header order: app menu, manuals and spotlight, undo and redo, MIDI access and capture, transport, time displays, base frequency, metronome, flexible gap, master peak meter, screen switch."
+        - "Reference menu: Dashboard, New, Open, Save, Save As, Save as Template, bundle save and open, Import (audio, stems, soundfonts, preset bundle, DAWproject), Export (mixdown, stems, DAWproject, JSON, video), live room, MIDI keyboard, backup targets, script and sample editors, preferences, storage, statistics. Entries are enabled only when a project is open."
+        - "Ours: a short Project menu (New, Open, Save to file, Save as template, Export audio, Export MIDI, Rename, Help). Backup targets and bundle files wait for the library work."
+      avoid: ["a long menu with developer tools mixed with user actions"]
+      ref_src: ["ui/header/Header.tsx:47-140", "service/StudioMenu.ts:21-160"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/TopBar.tsx", "web/app/src/ui/FileDialog.tsx"]
+        note: "Flat buttons: MIDI keyboard, Open file, Save to file, Export audio, Help, Settings. No menu, no New, no Save as template."
+      priority: P1
+      needs_command_api: "Existing: export.midi, render.wav (daemon). New project is a client action. Templates: D28 proposed."
+      ui_plan_task: null
+      proposed_task: U33
+      tag: borrow
+    - id: command_palette
+      we_call_it: "command palette"
+      purpose: "Type to do: create, go to, open, run any command, ranked by use."
+      behavior:
+        - "Verb symbols limit the search (plus create, slash open, at go to, tilde sample). Word start matching. Most used first. Unavailable entries greyed with a reason. Draggable, remembers position."
+      ref_src: ["ui/spotlight/SpotlightVerbs.ts", "ui/spotlight/Spotlight.tsx", "ui/spotlight/SpotlightUsage.ts"]
+      ours:
+        status: missing
+        files: []
+        note: "In progress as U21 (running); not in the tree yet."
+      priority: P1
+      needs_command_api: "D33 describe metadata (proposed), D20 history (accepted in daemon)."
+      ui_plan_task: U21
+      tag: borrow
+    - id: status_footer
+      we_call_it: "footer"
+      purpose: "Show save state, sample rate, latency, storage; warn on high latency."
+      behavior:
+        - "Reference footer items: online, project name (double click renames), sample rate, output latency (turns orange above a user threshold and shows a dismissible warning linking to the latency page), plugin delay, memory, storage."
+      ref_src: ["ui/Footer.tsx:45-100", "ui/LatencyWarning.tsx"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/StatusBar.tsx"]
+        note: "Saved at time, sample rate with latency, output level slider, storage notice. No dismissible latency warning."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: narrow_layout
+      we_call_it: "narrow layout"
+      purpose: "Usable on a small window."
+      behavior:
+        - "Reference has none (static notice on phones). Ours switches to a Tracks or Editor toggle under 640 px."
+      ref_src: ["main.ts:15-34", "mobile.sass:1-40"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/App.tsx"]
+        note: "Sidebar must collapse to the rail under 900 px and be a sheet under 640 px."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U01
+      tag: avoid
+
+  # ===================== Timeline and tracks =====================
+  timeline:
+    - id: time_ruler_and_loop_brace
+      we_call_it: "ruler"
+      purpose: "Bar numbers, seek by click, loop brace."
+      behavior:
+        - "Loop is a band with a start handle, end handle and body drag. Click seeks. Time grid labels adapt to zoom."
+      ref_src: ["ui/timeline/TimeAxis.tsx:1-144", "ui/timeline/LoopAreaEditor.tsx:12-30"]
+      ours:
+        status: have
+        files: ["web/app/src/roll/ArrangementController.ts", "web/app/src/roll/rulerGesture.ts"]
+        note: "U10 merged: seek, brace with handles."
+      priority: P0
+      needs_command_api: "transport.set loop (D21 accepted)."
+      ui_plan_task: U10
+      tag: borrow
+    - id: timeline_range_slider
+      we_call_it: "view range bar"
+      purpose: "A slider under the timeline showing the visible range; drag ends to zoom, drag body to pan."
+      behavior:
+        - "Gives a visible scroll and zoom control that does not depend on trackpad gestures (reference lesson: clip columns without a scrollbar left users stuck)."
+      ref_src: ["ui/timeline/TimelineRangeSlider.tsx", "ui/timeline/editors/ContentEditor.tsx:58-131"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/ArrangementPanel.tsx"]
+        note: "Zoom buttons and visible scrollbars exist; no range bar with end handles."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: U05
+      tag: borrow
+    - id: snap_selector
+      we_call_it: "grid menu (arrangement)"
+      purpose: "Choose how clips and notes snap."
+      behavior:
+        - "One shared setting in the reference, Smart default that follows zoom (cells never narrower than about 16 px), units down to 1/128. A move compares snapping the delta against snapping the absolute position and takes the closer."
+      ref_src: ["ui/timeline/Snapping.ts:18-70", "ui/timeline/SnapSelector.tsx"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/PianoRoll.tsx", "web/app/src/time.ts"]
+        note: "Roll has a Grid menu; arrangement snaps by bar or beat automatically with Shift to bypass, no visible menu."
+      priority: P1
+      needs_command_api: "none (view state)"
+      ui_plan_task: U05
+      tag: borrow
+    - id: track_header
+      we_call_it: "track header"
+      purpose: "Per track identity and quick controls beside its lane."
+      behavior:
+        - "Reference header parts: icon, collapse automation button, two labels (instrument name, target), volume and pan knobs, mute and solo, record arm doubling as input meter, menu button. Double click on the name edits it in place. The header takes keyboard focus; Delete removes the track (the last content track keeps the unit)."
+        - "Header is also a drop target (device drags) and highlights when a drop is allowed. A group lane can be dragged as a unit."
+      ref_src: ["ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx:33-178", "ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx:30-140"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/ArrangementPanel.tsx"]
+        note: "Name, sound dropdown, mute, solo, delete. No reorder, duplicate, color, arm, menu, inline rename affordance."
+      priority: P0
+      needs_command_api: "Existing: rename_track, move_track, delete_track, set_track_mute, set_track_solo. Duplicate has no command (client group of add_track and duplicate_region)."
+      ui_plan_task: null
+      proposed_task: U35
+      tag: borrow
+    - id: track_header_inline_rename
+      we_call_it: "rename in place"
+      purpose: "Double click a name to change it in a small floating text box."
+      behavior:
+        - "Floating input over the label, Enter commits, Escape cancels (aborts silently). Same pattern for device names and the project name in the footer."
+      ref_src: ["ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx:112-120", "ui/components/FloatingTextInput.tsx"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/CommitText.tsx"]
+        note: "CommitText exists for the project name; tracks have no rename UI visible in the header."
+      priority: P1
+      needs_command_api: "rename_track (exists)."
+      ui_plan_task: null
+      proposed_task: U35
+      tag: borrow
+    - id: track_reorder
+      we_call_it: "reorder tracks"
+      purpose: "Drag a track header up or down."
+      behavior:
+        - "Reference reorders by drag of the label area, with ordering rules for groups and an undo step per move."
+      ref_src: ["ui/timeline/tracks/audio-unit/UnitOrder.ts", "ui/timeline/tracks/audio-unit/TrackOrder.ts", "ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx:97-109"]
+      ours:
+        status: missing
+        files: []
+        note: "move_track exists in the model and commands, no UI."
+      priority: P1
+      needs_command_api: "move_track (exists)."
+      ui_plan_task: null
+      proposed_task: U35
+      tag: borrow
+    - id: track_duplicate
+      we_call_it: "duplicate track"
+      purpose: "Copy a track with its sound, mix and clips."
+      behavior:
+        - "Reference menu item Duplicate AudioUnit with a shortcut; selection based, works on several tracks."
+      ref_src: ["ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts:78-84"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P1
+      needs_command_api: "Gap: no duplicate_track. Build as one group: add_track, set_track_sound, volume, pan, then duplicate_region with new ids. Candidate core command later."
+      ui_plan_task: null
+      proposed_task: U35
+      tag: borrow
+    - id: track_color
+      we_call_it: "track color"
+      purpose: "Color coding for fast scanning on long projects."
+      behavior:
+        - "Reference clip hue follows the track and a color menu exists for regions. Ours: family hue from the sound category (tokens exist) with override as view state."
+      ref_src: ["ui/timeline/ColorMenu.ts", "ui/timeline/tracks/audio-unit/clips/Clip.tsx:53"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/palette.tsx", "web/app/src/index.css"]
+        note: "Family hue tokens exist; whether clips use them per track is unverified."
+      priority: P2
+      needs_command_api: "none (view state) or a track color field later."
+      ui_plan_task: null
+      proposed_task: U35
+      tag: borrow
+    - id: track_record_arm
+      we_call_it: "record arm"
+      purpose: "Choose which tracks take live notes; arm button doubles as an input meter."
+      behavior:
+        - "Shift click adds more armed tracks; header menu picks input and monitoring (off, direct, through effects) for audio inputs."
+        - "Edge: the device picker temporarily arms the edited track so its piano plays the candidate, and restores the previous arm set afterwards."
+      ref_src: ["ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx:138-170", "ui/browse/DeviceDialog.tsx:339-351", "manual recording.md:11-37"]
+      ours:
+        status: missing
+        files: []
+        note: "Live notes go to the selected track; U14 records into the selected clip. No per track arm."
+      priority: P1
+      needs_command_api: "none (session state)."
+      ui_plan_task: U14
+      proposed_task: "U35 for the button, U14 for capture"
+      tag: borrow
+    - id: track_height
+      we_call_it: "track height"
+      purpose: "Make a lane taller to see more."
+      behavior:
+        - "5 px handle at the lane bottom, double click resets, max 240 px, one undo step in the reference, Escape cancels."
+      ref_src: ["ui/timeline/tracks/audio-unit/TrackResize.tsx", "ui/timeline/tracks/audio-unit/UnitLane.tsx:60-75"]
+      ours:
+        status: missing
+        files: ["web/app/src/prefs.ts"]
+        note: "Density setting gives two fixed heights."
+      priority: P2
+      needs_command_api: "none (view state, not a command in ours)."
+      ui_plan_task: null
+      proposed_task: U35
+      tag: rethink
+    - id: clip_blocks
+      we_call_it: "clips on the timeline"
+      purpose: "Draw and edit clip blocks with mini content preview."
+      behavior:
+        - "No tool palette: the part of the clip under the pointer decides what a drag does (start edge, end edge, body, content start, loop length, fades). Cursor names the part."
+        - "Alt shows a cut cursor and a preview line, Alt click cuts. Drop onto another clip resolves by a setting (clip, push down, keep)."
+      avoid: ["overlap resolver complexity (known open crash path in the reference)", "hidden modifier gestures with no menu equivalent"]
+      ref_src: ["ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:154-345", "ui/timeline/tracks/audio-unit/regions/RegionCapturing.ts"]
+      ours:
+        status: have
+        files: ["web/app/src/roll/ArrangementController.ts", "web/app/src/roll/geometry.ts", "web/app/src/roll/regionDrag.ts"]
+        note: "Move, copy by Alt, resize right edge, split, multi select, keyboard access (U05 done). Left edge trim and fades not built."
+      priority: P0
+      needs_command_api: "move_region, resize_region, split_region, duplicate_region, move_region_to_track (exist). Left trim: D22 gap noted in ui-plan."
+      ui_plan_task: U05
+      tag: borrow
+    - id: clip_create_by_double_click
+      we_call_it: "draw a clip"
+      purpose: "Double click empty lane space to make a clip that fills the grid cell, opens in the editor."
+      behavior:
+        - "Trimmed so it never overlaps a neighbour. Disabled on frozen tracks. Editor panel opens if it was collapsed."
+      ref_src: ["ui/timeline/tracks/audio-unit/regions/RegionsArea.tsx:154-180"]
+      ours:
+        status: have
+        files: ["web/app/src/roll/ArrangementController.ts"]
+        note: "A dblclick handler exists; its exact placement rule is unverified."
+      priority: P0
+      needs_command_api: "add_region (exists)."
+      ui_plan_task: U05
+      tag: borrow
+    - id: clip_context_menu
+      we_call_it: "clip menu"
+      purpose: "Right click on a clip: the same actions as gestures and keys, with their shortcut shown."
+      behavior:
+        - "Reference items: Delete, Duplicate, Mute, Rename, Loop selection, Zoom selection, Consolidate, Flatten, Detect chords, Detect key, Bounce, Convert to mono, Edit in sample editor, Convert to clip, Export to MIDI file, Reset fades, Play mode, Detect BPM, Analyze."
+        - "Ours at first: Open in Notes, Split here, Duplicate, Repeat x N, Loop this clip, Mute (needs field), Move to track, Rename, Export MIDI, Delete."
+      ref_src: ["ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts:76-266"]
+      ours:
+        status: missing
+        files: []
+        note: "No context menus anywhere in web/app/src."
+      priority: P1
+      needs_command_api: "split_region, duplicate_region, delete_region, move_region_to_track exist. Rename and mute of a clip: no command (gap, small). Loop: D24 set_region_loop (planned U23)."
+      ui_plan_task: null
+      proposed_task: U32
+      tag: borrow
+    - id: selection_rectangle_arrangement
+      we_call_it: "rubber band selection"
+      purpose: "Drag on empty space to select clips; Shift inverts."
+      behavior:
+        - "Click selects, Shift click toggles, rectangle selects, Shift plus rectangle inverts."
+      ref_src: ["ui/timeline/SelectionRectangle.tsx", "ui/timeline/TimelineSelectableLocator.ts"]
+      ours:
+        status: missing
+        files: []
+        note: "Shift click multi select exists; no rectangle. Roll marquee is U17."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U17
+      proposed_task: "U17 covers the roll; arrangement rectangle added to U32"
+      tag: borrow
+    - id: clip_copy_paste_repeat
+      we_call_it: "copy, paste, duplicate, repeat"
+      purpose: "Build long form quickly by repeating blocks."
+      behavior:
+        - "Reference: Cmd or Ctrl drag copies; Duplicate item. Ours adds Repeat x N as one group."
+      ref_src: ["manual keyboard-shortcuts.md:9-49", "ui/timeline/tracks/audio-unit/regions/RegionContextMenu.ts:76-100"]
+      ours:
+        status: missing
+        files: ["web/app/src/state/actions.ts"]
+        note: "copyClips by Alt drag exists; clipboard and Repeat x N are U11 (not in tree)."
+      priority: P0
+      needs_command_api: "duplicate_region, add_notes (exist)."
+      ui_plan_task: U11
+      tag: borrow
+    - id: auto_scroll_follow
+      we_call_it: "follow playhead and edge scroll"
+      purpose: "Keep the playhead in view; scroll while dragging near the edge."
+      behavior:
+        - "Follow is opt in and off by default in the reference. Edge scroll speed is capped, with exclusions for resize handles and knobs."
+      ref_src: ["ui/AutoScroll.ts", "ui/timeline/Config.ts:3-10", "studio core StudioSettings.ts:35-43"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/TopBar.tsx", "web/app/src/state/transportActions.ts"]
+        note: "Follow toggle done (U10). Edge scroll while dragging is T26, status unverified."
+      priority: P1
+      needs_command_api: "transport.set follow (D21)."
+      ui_plan_task: U10
+      tag: borrow
+    - id: timeline_lanes
+      we_call_it: "timeline lanes (markers, tempo, signature, key, chords)"
+      purpose: "Song structure and changes shown as lanes above the tracks, on demand."
+      behavior:
+        - "Hidden by default except markers. Markers: double click adds one with the next name in a sequence (Intro, Verse style), context menu renames and removes. Menu in the timeline header toggles each lane and shows its shortcut."
+        - "Tempo lane edits BPM points; key lane sets the scale at a position; chord lane writes chord names."
+      ref_src: ["ui/timeline/TimelineHeader.tsx:54-90", "ui/timeline/tracks/primary/marker/MarkerTrackBody.tsx:55-72", "ui/timeline/tracks/primary/PrimaryTracks.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: "Tempo, signature and key are single fields in the top bar (position 0 only in UI)."
+      priority: P1
+      needs_command_api: "set_tempo and set_key accept a tick (exist). Markers: D24 add_marker etc. planned in U23 (not built)."
+      ui_plan_task: U29
+      proposed_task: U39
+      tag: borrow
+    - id: automation_lane_editor
+      we_call_it: "automation lane"
+      purpose: "Draw how a parameter changes over time (swell, fade, filter sweep)."
+      behavior:
+        - "Lane under the track named after the parameter; collapse toggle in the header. Double click creates or deletes a point; Shift click on a segment cuts; Cmd drag paints points; Alt drag draws a straight line; Enter on a selected point types its value; Shift disables value snap, Alt constrains to time. Interpolation menu: none, linear, curve; Shift drag on a segment changes curve slope."
+        - "Snap: a click near an existing node picks the node on the side nearest the cursor; value snaps to an anchor line (dashed) when close."
+        - "Header help text in the reference lists these gestures; ours should show them as menu items too."
+      avoid: ["gesture-only discovery"]
+      ref_src: ["ui/timeline/editors/value/ValueEditor.tsx:63-382", "ui/timeline/editors/value/ValueEditorHeader.tsx:16-39", "ui/timeline/editors/value/ValueContextMenu.ts:25-50", "manual automation.md:1-40"]
+      ours:
+        status: missing
+        files: []
+        note: "No automation in the model."
+      priority: P1
+      needs_command_api: "Gap: automation lanes and points (proposed U37 with a new D entry)."
+      ui_plan_task: null
+      proposed_task: "U37 then U38"
+      tag: borrow
+    - id: automation_from_control
+      we_call_it: "Automate this"
+      purpose: "Right click any automatable control to create or remove its lane; show that it is automated."
+      behavior:
+        - "Menu items: Create Automation, Remove Automation, Reset Value, Learn MIDI control. A wrapper adds an 'automated' class to the control when a lane exists."
+        - "Applies to track volume, pan, mute, solo and all device parameters."
+      ref_src: ["ui/menu/automation.ts:31-80", "ui/components/AutomationControl.tsx:89-103", "ui/components/ControlIndicator.tsx:1-25"]
+      ours:
+        status: missing
+        files: ["web/app/src/ui/MixSlider.tsx", "web/app/src/ui/mixer/StripSlider.tsx"]
+        note: ""
+      priority: P1
+      needs_command_api: "Same gap as automation_lane_editor."
+      ui_plan_task: null
+      proposed_task: U38
+      tag: borrow
+    - id: audio_clip_and_warp_editor
+      we_call_it: "audio clip editor"
+      purpose: "Waveform view with transient and warp markers, stretch mode, waveform offset."
+      behavior:
+        - "Stretch modes: none, pitch (tape), a quality time stretcher, grain. Two marker rows over the canvas (transients, warp points), stretch selector, waveform offset in seconds."
+        - "Region menu also detects BPM and bounces to a new sample."
+      avoid: ["four stretch modes shown to a beginner (offer 'Match tempo' on or off)"]
+      ref_src: ["ui/timeline/editors/audio/AudioEditor.tsx:28-62", "ui/timeline/editors/audio/StretchSelector.tsx:20-83", "ui/timeline/editors/audio/AudioEditorHeader.tsx:19-38"]
+      ours:
+        status: missing
+        files: []
+        note: "No audio regions yet (T23)."
+      priority: P2
+      needs_command_api: "Gap: audio region and stretch fields (T23)."
+      ui_plan_task: null
+      tag: rethink
+    - id: launch_slot_grid
+      we_call_it: "launch slots (not planned)"
+      purpose: "Grid of loops launched live."
+      behavior:
+        - "Cells show progress as a ring, idle, waiting for the next bar, playing. A muted slot still schedules but emits nothing. Group slots launch several tracks."
+        - "Not needed for compose-and-export goals; skip until a live use case appears."
+      ref_src: ["ui/timeline/tracks/audio-unit/clips/Clip.tsx:31-106", "ui/timeline/tracks/audio-unit/clips/ClipPlaybackButton.tsx:20-51", "ui/timeline/tracks/audio-unit/clips/ClipsArea.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "Gap: launch model."
+      ui_plan_task: null
+      tag: avoid
+    - id: track_groups_and_freeze
+      we_call_it: "group tracks and freeze (not planned)"
+      purpose: "Fold many tracks behind one bus; render a track to audio to save CPU."
+      behavior:
+        - "Group collapse toggle, group drag, freeze and unfreeze in the menu. Frozen tracks block most edits."
+        - "Freeze matters for the 300 track budget later; groups matter for orchestral templates."
+      ref_src: ["ui/timeline/tracks/audio-unit/TrackGrouping.ts", "ui/timeline/tracks/audio-unit/GroupRails.tsx", "ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts:86-93"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "Gap: bus tracks and freeze."
+      ui_plan_task: null
+      tag: rethink
+
+  # ===================== Editors =====================
+  editors:
+    - id: piano_roll
+      we_call_it: "Notes editor"
+      purpose: "Write and edit notes of a clip."
+      behavior:
+        - "Double click on empty grid creates a note with the last used length and velocity, auditions it; double click on a note deletes it. Dragging the body moves position and pitch together and auditions the pitch; the end resizes. Creation and selection are one undo step."
+        - "Centers on existing notes or around C3 when empty; takes keyboard focus only when nothing else holds it."
+      ref_src: ["ui/timeline/editors/notes/pitch/PitchEditor.tsx:100-320", "ui/timeline/editors/notes/NoteEditor.tsx:181-208", "ui/timeline/editors/notes/NoteDrawDefaults.ts:4-15"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/PianoRoll.tsx", "web/app/src/roll/RollController.ts"]
+        note: "Draw, move, resize, delete, scrollbars, grid menu, key shading (U13)."
+      priority: P0
+      needs_command_api: "add_note, move_note, resize_note, delete_note, add_notes, move_notes, resize_notes, delete_notes (exist)."
+      ui_plan_task: U13
+      tag: borrow
+    - id: roll_velocity_lane
+      we_call_it: "loudness lane"
+      purpose: "Edit one per note value under the grid."
+      behavior:
+        - "Dropdown chooses the property (velocity default) with min and max labels. Cmd drag paints, Alt drag draws a straight line."
+      ref_src: ["ui/timeline/editors/notes/property/PropertyHeader.tsx:16-40", "ui/timeline/editors/notes/NoteEditor.tsx:122-125"]
+      ours:
+        status: have
+        files: ["web/app/src/roll/RollController.ts"]
+        note: "A velocity strip at the bottom of the roll exists; ramp and paint belong to U17."
+      priority: P1
+      needs_command_api: "set_note_velocity, set_notes_velocity (exist)."
+      ui_plan_task: U17
+      tag: borrow
+    - id: roll_multi_select_and_bulk
+      we_call_it: "select many notes"
+      purpose: "Marquee, Shift toggle, move or resize the whole selection."
+      behavior:
+        - "Rectangle selects, Shift click toggles, Shift plus rectangle inverts."
+      ref_src: ["ui/timeline/editors/notes/NoteEditor.tsx", "ui/timeline/SelectionRectangle.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: "Planned U17 (wave 2). Bulk commands exist."
+      priority: P0
+      needs_command_api: "move_notes, resize_notes, delete_notes, set_notes_velocity, transpose_notes, quantize_notes (exist)."
+      ui_plan_task: U17
+      tag: borrow
+    - id: roll_scale_and_key
+      we_call_it: "key and scale helpers"
+      purpose: "Shade out of key rows, stay in key, fit to key."
+      behavior:
+        - "Scale is a mask of allowed pitch classes plus a root; follow the project key at the playhead; Fit to Key pushes notes onto the scale; key and chords can be detected from existing notes."
+      ref_src: ["ui/timeline/editors/notes/pitch/ScaleConfig.ts:4-50", "ui/timeline/editors/notes/pitch/PitchMenu.ts:91-93"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/KeyPicker.tsx", "web/app/src/roll/keyScale.ts"]
+        note: "Key picker, shading, stay in key. Fit to key button depends on conform_notes_to_scale UI (U17 or U19)."
+      priority: P0
+      needs_command_api: "set_key, conform_notes_to_scale (exist)."
+      ui_plan_task: U13
+      tag: borrow
+    - id: roll_edit_menu
+      we_call_it: "Notes edit menu"
+      purpose: "Visible list of the bulk actions."
+      behavior:
+        - "Edit: delete, duplicate, step recording, consolidate, quantize, resize by two or half, inverse, reverse, fit to key, transpose by semitone or octave. View: note height presets, center notes, zoom to all notes."
+      ref_src: ["ui/timeline/editors/notes/pitch/PitchMenu.ts:23-108", "ui/timeline/editors/notes/NoteViewMenu.ts:9-43", "ui/timeline/editors/ContentEditor.tsx:66-110"]
+      ours:
+        status: missing
+        files: []
+        note: "Actions exist as commands (transpose_notes, quantize_notes, conform_notes_to_scale) but have no menu in the roll."
+      priority: P1
+      needs_command_api: "transpose_notes, quantize_notes, resize_notes, conform_notes_to_scale (exist). Reverse and inverse: gaps, optional."
+      ui_plan_task: U17
+      proposed_task: "U32 hosts the menu kit, U17 fills items"
+      tag: borrow
+    - id: chord_strip
+      we_call_it: "chord strip"
+      purpose: "Click a chord of the key to write it."
+      behavior:
+        - "Reference has a chord lane on the timeline and chord names on pads; ours shows the seven chords of the key as buttons."
+      ref_src: ["ui/timeline/tracks/primary/chord", "ui/software-midi/ChordPads.tsx:15-60"]
+      ours:
+        status: missing
+        files: []
+        note: "Planned U19; theory.chords is built in the core (U18)."
+      priority: P1
+      needs_command_api: "theory.chords, add_notes (exist)."
+      ui_plan_task: U19
+      tag: borrow
+    - id: step_recording
+      we_call_it: "step input"
+      purpose: "Enter notes one at a time from a keyboard, playhead advances by the grid."
+      behavior:
+        - "While on and stopped, each incoming note is written at the snapped playhead with snap length, then the playhead advances."
+      ref_src: ["ui/timeline/editors/notes/NoteEditor.tsx:83-103", "ui/timeline/editors/notes/NoteEditor.tsx:247-250"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "add_note (exists)."
+      ui_plan_task: null
+      tag: rethink
+    - id: roll_note_list
+      we_call_it: "note list view"
+      purpose: "Table of notes, keyboard editable, for screen readers."
+      behavior:
+        - "Not in the reference (it exposes no canvas content to assistive tech). Ours is required by principle P7."
+      ref_src: ["ui/timeline/editors/notes/pitch/PitchEditor.tsx:314-320"]
+      ours:
+        status: missing
+        files: []
+        note: "Planned U17."
+      priority: P1
+      needs_command_api: "none beyond note commands."
+      ui_plan_task: U17
+      tag: avoid
+    - id: editor_header_tools
+      we_call_it: "editor tool row (grid, View, Edit)"
+      purpose: "Grid select plus two small menus above the editor."
+      behavior:
+        - "Grid menu on the left, View and Edit menu buttons on the right, time axis plus region bound strip under them, range slider below."
+      ref_src: ["ui/timeline/editors/ContentEditor.tsx:92-133"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/PianoRoll.tsx"]
+        note: "Grid and zoom exist; no View or Edit menu."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U17
+      tag: borrow
+
+  # ===================== Sounds, devices and live input =====================
+  sounds_and_devices:
+    - id: sound_panel
+      we_call_it: "sound panel"
+      purpose: "Show and tweak what the selected track plays: sound, variation, volume, pan, send, effects."
+      behavior:
+        - "Reference device panel layout, left to right: note effects (MIDI), instrument, audio effects, and a compact channel strip at the far right. Insert buttons sit before the first device and after each one. A placeholder with Add instrument and Add audio track shows when no track is selected."
+        - "Edits one track at a time (the selected one). Selected device headers support Shift or Ctrl click multi select, copy and paste, drag to move."
+        - "Editors stay attached when the chain re-renders (detaching reloads embedded views); focus is restored to the previously focused header afterwards, otherwise the next shortcut hits the wrong target."
+        - "Frozen tracks show the panel dimmed."
+        - "Ours: simple row, sound name big, then sliders; effects come with U40 and U41."
+      avoid: ["note effects and script devices as first class beginner concepts", "layered instruments (composite) which add concepts"]
+      ref_src: ["ui/devices/panel/DevicePanel.tsx:87-239", "ui/devices/panel/NoAudioUnitSelectedPlaceholder.tsx:15-18", "ui/devices/DeviceEditor.tsx:75-229"]
+      ours:
+        status: missing
+        files: ["web/app/src/ui/Dock.tsx"]
+        note: "The Sound tab shows the browser, not the selected track's sound."
+      priority: P1
+      needs_command_api: "set_track_sound, set_track_volume, set_track_pan, set_track_reverb_send (exist). Effect chain: gap (U40)."
+      ui_plan_task: null
+      proposed_task: U34
+      tag: borrow
+    - id: device_header
+      we_call_it: "sound or effect header"
+      purpose: "Power, collapse, name, preset menu, device menu on every device."
+      behavior:
+        - "Icon click collapses, second icon toggles power, name edits by double click, folder icon opens the preset list, menu button for the rest."
+        - "Header is color coded by type (instrument green, audio effect blue, note effect orange)."
+      ref_src: ["ui/devices/DeviceEditor.tsx:98-228"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "Gap: effect bypass (U40)."
+      ui_plan_task: null
+      proposed_task: U41
+      tag: borrow
+    - id: sound_variation_menu
+      we_call_it: "variations menu and pager"
+      purpose: "Switch between saved variations of the same sound without leaving the panel."
+      behavior:
+        - "Folder button lists user variations first (user folder icon), then built in ones (cloud icon) with a separator; disabled when none exist, text 'No presets available'. Up and down arrows next to the name step to the previous or next one."
+        - "Saving asks for name, description and comma separated tags. Variations exist for one device, an effect chain or a whole track."
+      ref_src: ["ui/devices/DeviceEditor.tsx:162-210", "ui/devices/PresetPager.tsx:17-44", "manual presets.md:3-40", "ui/browse/PresetDialogs.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: "Catalogue entries are whole sounds, not variations of one."
+      priority: P2
+      needs_command_api: "Gap: variation storage (client or catalogue)."
+      ui_plan_task: null
+      proposed_task: U34
+      tag: borrow
+    - id: sound_picker_audition
+      we_call_it: "sound picker with try before keep"
+      purpose: "Hear a candidate on the track right away; keep or cancel."
+      behavior:
+        - "Clicking creates the candidate at once so it plays; the next click first undoes the previous candidate; Enter keeps (one undo step); Escape restores everything. Arrow keys step with a short delay (about a quarter second) so fast stepping does not spam changes. A single remaining search hit is auto picked unless the user cancelled it before."
+        - "Entry data: name, one line brief, tags, facts (label and value pairs), kind badge (stock, user, preset, script, plugin, bank), bundle marker for racks and chains. Counter 'visible / total'. Toggles to show stock, user, presets, scripts, plugins, banks. Tag chips fill the search."
+        - "Relevance: names starting with the query first, then names containing every word, then others."
+        - "Layout follows window size so the list always shows at least three rows and the candidate stays visible."
+      avoid: ["modal dialog blocking the transport", "brand names", "list cramped to four rows on short windows"]
+      ref_src: ["ui/browse/DeviceDialog.tsx:55-139", "ui/browse/DeviceDialog.tsx:305-368", "ui/browse/DeviceAudition.ts", "ui/browse/DeviceCatalog.ts"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/SoundBrowser.tsx", "web/app/src/audio/preview.ts"]
+        note: "Hear plays a preview without changing the track; Use commits. No try, step by arrow keys, or cancel (D32 groups are daemon side only)."
+      priority: P0
+      needs_command_api: "group.begin, group.commit, group.rollback (daemon has them, D32 proposed, wasm not exposed). set_track_sound."
+      ui_plan_task: U07
+      tag: borrow
+    - id: on_screen_keyboard
+      we_call_it: "on screen keyboard"
+      purpose: "Play and audition without a MIDI device or letter keys."
+      behavior:
+        - "Piano drawn under the picker; shows notes played live; up and down arrows move the list; Space plays the transport unless typing."
+      ref_src: ["ui/browse/DevicePiano.tsx", "ui/software-midi/PianoRoll.tsx", "ui/software-midi/SoftwareMIDIPanel.tsx"]
+      ours:
+        status: missing
+        files: ["web/app/src/input/liveInput.ts"]
+        note: "Computer keyboard and Web MIDI exist; no clickable keys."
+      priority: P1
+      needs_command_api: "none (live audio only)."
+      ui_plan_task: null
+      proposed_task: U36
+      tag: borrow
+    - id: chord_pads
+      we_call_it: "chord pads"
+      purpose: "Numbered pads that play the chords of the current key."
+      behavior:
+        - "Pad names update from the key at the playhead; a pad lights while held; mouse or number keys."
+      ref_src: ["ui/software-midi/ChordPads.tsx:15-60", "ui/software-midi/ChordPadPlayer.ts"]
+      ours:
+        status: missing
+        files: []
+        note: "theory.chords exists."
+      priority: P1
+      needs_command_api: "theory.chords (exist)."
+      ui_plan_task: null
+      proposed_task: U36
+      tag: borrow
+    - id: catch_last_played
+      we_call_it: "catch what I just played"
+      purpose: "Keep a take you did not record."
+      behavior:
+        - "While a MIDI track is armed, notes are buffered whether or not the transport runs. A header button is dim when the buffer is empty and bright otherwise; clicking commits the buffer as a region at the playhead sized to the played span. Shortcut Cmd+Shift+M. Stopped transport: timed by wall clock; playing: timed to the song position."
+      ref_src: ["ui/header/CaptureMidiButton.tsx:14-35", "manual capture-midi.md:1-30"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P1
+      needs_command_api: "add_region plus add_notes (exist); client buffer."
+      ui_plan_task: null
+      proposed_task: U36
+      tag: borrow
+    - id: effect_chain
+      we_call_it: "effect chain"
+      purpose: "Ordered effects on a track."
+      behavior:
+        - "Insert slots between devices open the picker filtered for effects. Drag between tracks was requested and closed in favour of cut and paste; dragging within the chain reorders."
+        - "Effects colored blue; bypass by header power."
+      avoid: ["50 device types, scripting devices (Werkstatt, Apparat style), modular device", "neural amp and similar heavy devices"]
+      ref_src: ["ui/devices/panel/DevicePanel.tsx:110-119", "ui/devices/DeviceDragging.ts:8-40", "ui/devices/audio-effects", "ui/devices/AddEffectButton.tsx:16-22"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P1
+      needs_command_api: "Gap: add_effect, remove_effect, move_effect, set_effect_param (U40)."
+      ui_plan_task: null
+      proposed_task: "U40 then U41"
+      tag: borrow
+    - id: reverb_send_strip_control
+      we_call_it: "reverb amount"
+      purpose: "Per track send and master reverb in the mixer and sound panel."
+      behavior:
+        - "Reference strips have aux sends before pan; routing is a dropdown, not a patch bay."
+      ref_src: ["ui/mixer/AuxSend.tsx", "ui/mixer/ChannelStrip.tsx:183-216"]
+      ours:
+        status: missing
+        files: ["web/app/src/ui/mixer/Mixer.tsx"]
+        note: "Commands set_track_reverb_send, set_master_reverb exist (D26), no UI."
+      priority: P1
+      needs_command_api: "set_track_reverb_send, set_master_reverb (exist)."
+      ui_plan_task: U29
+      proposed_task: "U34 for the per track send"
+      tag: borrow
+    - id: modulation_panel
+      we_call_it: "movement (modulation)"
+      purpose: "Slow automatic parameter change (LFO, random, steps, macro)."
+      behavior:
+        - "Reference screen with modulator editors and a target list with value ranges. Handy for ambient long form (a slow filter drift) but a big concept."
+      ref_src: ["ui/modulation/ModulationPanel.tsx", "ui/modulation/TargetList.tsx", "ui/menu/automation.ts:106-126"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "Gap."
+      ui_plan_task: null
+      tag: rethink
+    - id: piano_tutorial_note_fall
+      we_call_it: "falling notes view (not planned)"
+      purpose: "Learn to play a MIDI track by watching falling notes."
+      behavior:
+        - "Own screen, keyboard, note scale, labels, transpose, per track exclusion. Could help 'recreate by ear' practice, but a separate product feature."
+      ref_src: ["ui/piano-panel/PianoModePanel.tsx:34-70", "ui/piano-panel/NoteFall.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      tag: avoid
+    - id: control_value_tooltip
+      we_call_it: "value tooltip on controls"
+      purpose: "Show the exact number while dragging a slider or knob."
+      behavior:
+        - "Tooltip follows the drag; plain text tooltips carry the shortcut. A preference hides help hints."
+      ref_src: ["ui/surface/ValueTooltip.tsx", "ui/surface/TextTooltip.tsx", "ui/shortcuts/ShortcutTooltip.ts"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/MixSlider.tsx", "web/app/src/ui/mixer/StripSlider.tsx"]
+        note: "title texts and aria values exist; no live value bubble (unverified)."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U38
+      tag: borrow
+
+  # ===================== Mixer and meters =====================
+  mixer:
+    - id: mixer_strip
+      we_call_it: "mixer strip"
+      purpose: "Per track level, pan, mute, solo, meter."
+      behavior:
+        - "Reference top to bottom: input name, sends, output selector, pan knob, volume readout and peak readout over a tall fader with dB scale, mute and solo. Strip context menu: group collapse, freeze, auto EQ, duplicate, delete, reset mute, reset solo."
+        - "Solo is exclusive across tracks via a helper; the master cannot be soloed but keeps the slot hidden so mute keeps its position."
+      ref_src: ["ui/mixer/ChannelStrip.tsx:183-216", "ui/timeline/tracks/audio-unit/AudioUnitChannelControls.tsx:57-78"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/mixer/Mixer.tsx", "web/app/src/ui/mixer/StripSlider.tsx", "web/app/src/ui/mixer/Meter.tsx"]
+        note: "Volume, pan (disclosed), mute, solo, meter. No sends, no strip menu."
+      priority: P0
+      needs_command_api: "set_track_volume, set_track_pan, set_track_mute, set_track_solo (exist)."
+      ui_plan_task: U08
+      tag: borrow
+    - id: master_strip
+      we_call_it: "master strip"
+      purpose: "Master level, reverb, loudness."
+      behavior:
+        - "Reference master strip shows output routing and a mastering entry (a chain of fixed processors with profiles)."
+      ref_src: ["ui/mixer/ChannelStrip.tsx:183-216", "ui/mixer/MasteringPanel.tsx", "ui/mixer/MasteringProfiles.ts"]
+      ours:
+        status: missing
+        files: []
+        note: "set_master_volume and set_master_reverb exist; no strip."
+      priority: P0
+      needs_command_api: "set_master_volume, set_master_reverb (exist)."
+      ui_plan_task: U29
+      tag: borrow
+    - id: level_meters
+      we_call_it: "meters"
+      purpose: "Show peak per strip and master."
+      behavior:
+        - "Reference header has a horizontal master peak meter; strips have vertical meters; a dedicated analysis screen has VU meters, spectrum, spectrogram, loudness bars, goniometer and scope."
+      ref_src: ["ui/components/PeakMeter.tsx", "ui/components/HorizontalPeakMeter.tsx", "ui/meter/VUMeter.tsx", "ui/header/Header.tsx:119-125"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/mixer/Meter.tsx", "web/app/src/state/meter.ts"]
+        note: "Estimated levels; measured per track peaks wait for T27. Master output level slider is in the footer."
+      priority: P1
+      needs_command_api: "none (T27 engine export)."
+      ui_plan_task: U08
+      tag: borrow
+    - id: analysis_panel
+      we_call_it: "analysis view (loudness first)"
+      purpose: "Check the mix: loudness for video, spectrum."
+      behavior:
+        - "Six cards (VU, spectrum, spectrogram, level in LUFS, goniometer, scope). We take loudness only first (video creators)."
+      ref_src: ["ui/analysis/AnalysisPanel.tsx", "ui/analysis/LevelCard.tsx", "ui/analysis/SpectrumCard.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "none."
+      ui_plan_task: null
+      proposed_task: U44
+      tag: borrow
+    - id: header_master_meter
+      we_call_it: "master meter in the top bar"
+      purpose: "Always visible level so clipping is noticed."
+      behavior:
+        - "Small horizontal meter on the right of the header, driven by the engine peaks."
+      ref_src: ["ui/header/Header.tsx:119-125"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/StatusBar.tsx"]
+        note: "Output level slider in the footer, not a meter."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U44
+      tag: borrow
+
+  # ===================== Transport and header =====================
+  transport:
+    - id: transport_cluster
+      we_call_it: "transport"
+      purpose: "Record, play, stop, loop, metronome, count in."
+      behavior:
+        - "Buttons carry shortcut in the tooltip. Space toggles play, period stops, R records with count in, Shift+R without."
+      ref_src: ["ui/header/TransportGroup.tsx:25-125", "ui/shortcuts/GlobalShortcuts.ts:38-57"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/TopBar.tsx", "web/app/src/state/transportActions.ts"]
+        note: "Play, stop, loop, metronome, count in, follow. Record button arrives with U14."
+      priority: P0
+      needs_command_api: "transport.set (D21)."
+      ui_plan_task: U10
+      tag: borrow
+    - id: tempo_signature_key_fields
+      we_call_it: "tempo, bar length and key"
+      purpose: "Edit song basics from the bar."
+      behavior:
+        - "Reference readouts have captions under each value and are editable fields: bar, beat, tempo, meter, shuffle, key."
+      avoid: ["shuffle as a top bar field"]
+      ref_src: ["ui/header/TempoControl.tsx", "ui/header/MeterControl.tsx", "ui/header/KeyControl.tsx", "ui/header/TransportGroup.tsx:25-125"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/TopBar.tsx", "web/app/src/ui/KeyPicker.tsx"]
+        note: ""
+      priority: P0
+      needs_command_api: "set_tempo, set_time_signature, set_key (exist)."
+      ui_plan_task: U13
+      tag: borrow
+    - id: tap_tempo
+      we_call_it: "tap tempo"
+      purpose: "Set tempo by tapping along with a reference."
+      behavior:
+        - "Header button in the reference plus a full Match Tempo screen."
+      ref_src: ["ui/header/TapButton.tsx", "ui/pages/TapTempo.tsx"]
+      ours:
+        status: missing
+        files: ["web/app/src/icons/index.tsx"]
+        note: "An icon exists; flow F1 in the plan needs the button."
+      priority: P1
+      needs_command_api: "set_tempo (exists)."
+      ui_plan_task: null
+      proposed_task: U39
+      tag: borrow
+    - id: position_readout
+      we_call_it: "position readout"
+      purpose: "Show where the playhead is in bars, beats and seconds."
+      behavior:
+        - "Two displays: musical and absolute time, clickable to change unit."
+      ref_src: ["ui/header/TimeStateDisplay.tsx", "ui/header/MusicalUnitDisplay.tsx", "ui/header/AbsoluteUnitDisplay.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: "No readout in the top bar; the playhead is only drawn on canvases."
+      priority: P1
+      needs_command_api: "transport.get (exists)."
+      ui_plan_task: null
+      proposed_task: U39
+      tag: borrow
+    - id: undo_redo_buttons
+      we_call_it: "undo and redo"
+      purpose: "Two buttons that grey out when impossible."
+      behavior:
+        - "No history list in the reference; hidden by default on non touch devices. Ours shows step label tooltips and a history panel (U21)."
+      ref_src: ["ui/header/UndoRedoButtons.tsx:19-43"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/TopBar.tsx"]
+        note: "History panel is U21 (running)."
+      priority: P0
+      needs_command_api: "undo, redo, history.get (D20)."
+      ui_plan_task: U21
+      tag: rethink
+    - id: midi_input_button
+      we_call_it: "MIDI keyboard button"
+      purpose: "Connect a MIDI keyboard; show how many inputs."
+      behavior:
+        - "Permission denied and unsupported browsers need a plain explanation. Device chooser is a later step."
+      ref_src: ["ui/header/MidiAccessButton.tsx", "manual connect-midi-device.md", "manual firefox-midi.md"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/TopBar.tsx", "web/app/src/ui/EnvDialog.tsx", "web/app/src/input/liveInput.ts"]
+        note: "Toggle only, no device list."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: audio_output_and_latency
+      we_call_it: "audio output and latency check"
+      purpose: "Pick the output device and measure latency for recording."
+      behavior:
+        - "Output selector on the master strip; guided calibration page. The browser can under report output latency by a wide margin (90 ms reported, 300 ms real in the reference notes), so calibration matters for recording."
+      ref_src: ["ui/mixer/AudioOutputSelector.tsx", "ui/LatencyMeasurement.tsx", "ui/LatencyWarning.tsx", "manual latency-calibration.md:7-14"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/StatusBar.tsx"]
+        note: "Footer shows the delay; no warning or calibration."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U43
+      tag: borrow
+
+  # ===================== Dialogs, feedback, onboarding =====================
+  feedback_and_onboarding:
+    - id: dialog_kit
+      we_call_it: "dialog kit"
+      purpose: "One consistent dialog for info, confirm, choose, progress and errors."
+      behavior:
+        - "Reference shapes: show (custom content), info, approve (primary on yes or reversed for destructive), choose, select, progress (headline, bar, cancel), process monolog, error with an optional backup command. Origin element lets the dialog open near its trigger. Abort signal closes it from code."
+      ref_src: ["ui/components/dialogs.tsx:27-135", "ui/components/dialogs.tsx:226-262", "ui/components/dialogs.tsx:345-405", "ui/components/Dialog.tsx"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/FileDialog.tsx", "web/app/src/ui/EnvDialog.tsx", "web/app/src/ui/Help.tsx", "web/app/src/ui/PianoRoll.tsx"]
+        note: "Four dialogs each repeating the same native dialog markup; no shared component, no confirm or progress."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U33
+      tag: borrow
+    - id: toast_stack
+      we_call_it: "toast"
+      purpose: "Short messages with an optional Undo."
+      behavior:
+        - "Stack in one corner, 2 seconds or 5 for texts longer than 60 characters, then fade. A preference turns them off. Cancelled drag drops can use one to say why nothing happened."
+      ref_src: ["ui/surface/Toast.tsx:11-25", "ui/surface/Surface.tsx:212-213"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/App.tsx", "web/app/src/ui/Announcer.tsx"]
+        note: "One toast for deleted tracks plus a status bar message; no queue."
+      priority: P1
+      needs_command_api: "undo (exists)."
+      ui_plan_task: null
+      proposed_task: U33
+      tag: borrow
+    - id: unsaved_work_guard
+      we_call_it: "unsaved work guard"
+      purpose: "Avoid losing work on close or when opening another project."
+      behavior:
+        - "Browser leave prompt; a recovery copy written to private storage and offered next start; approval dialog before replacing the open project."
+      ref_src: ["service/StudioService.ts:612", "studio core project/Recovery.ts:16-40"]
+      ours:
+        status: missing
+        files: ["web/app/src/persistence.ts"]
+        note: "Autosave to the browser exists; no leave prompt and no recovery offer wording found."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U33
+      tag: rethink
+    - id: progress_dialog_cancel
+      we_call_it: "progress with cancel"
+      purpose: "Show long exports and imports with time left."
+      behavior:
+        - "Headline, optional progress bar, cancel callback."
+      ref_src: ["ui/components/dialogs.tsx:226-262", "ui/components/ProgressBar.tsx"]
+      ours:
+        status: missing
+        files: ["web/app/src/audio/offline.ts"]
+        note: "Export renders on the main thread with no progress; planned U29."
+      priority: P1
+      needs_command_api: "none (worker)."
+      ui_plan_task: U29
+      tag: borrow
+    - id: export_dialog
+      we_call_it: "export sheet"
+      purpose: "Choose what to render and in which format."
+      behavior:
+        - "Section (entire song), format with a one line description, channels, sample rate, bit depth, one Export button. Stems and DAWproject export as separate items."
+      ref_src: ["ui/components/BounceOptionsSelector.tsx", "ui/components/MixdownSectionSelector.tsx", "ui/components/AudioFormatSelector.tsx", "service/Mixdowns.ts"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/TopBar.tsx", "web/app/src/state/actions.ts"]
+        note: "One 'Export audio' button that renders a WAV. No range or format choice."
+      priority: P1
+      needs_command_api: "render.wav, export.midi (exist, daemon)."
+      ui_plan_task: U29
+      tag: borrow
+    - id: import_dialogs
+      we_call_it: "import"
+      purpose: "Bring in MIDI, audio, sound banks, other projects."
+      behavior:
+        - "Reference: Audio Files, Stems zip, Soundfonts, Preset Bundle, DAWproject. Pickers need a live user gesture; failures give plain dialogs."
+      ref_src: ["service/StudioMenu.ts:54-68", "ui/timeline/MidiImport.ts"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/TopBar.tsx"]
+        note: "Open project JSON only; MIDI import is U30."
+      priority: P1
+      needs_command_api: "composer-midi import (exists in CLI), Backend method needed."
+      ui_plan_task: U30
+      tag: borrow
+    - id: tooltips
+      we_call_it: "tooltips with keys"
+      purpose: "Name the control and show its shortcut."
+      behavior:
+        - "Built from the same shortcut data as the manager page."
+      ref_src: ["ui/shortcuts/ShortcutTooltip.ts", "ui/surface/TextTooltip.tsx"]
+      ours:
+        status: partial
+        files: ["web/app/src/input/keymap.ts", "web/app/src/ui/TopBar.tsx"]
+        note: "title and aria-label strings with keys, written by hand per control."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: environment_error_dialogs
+      we_call_it: "plain environment errors"
+      purpose: "Explain missing browser features, full storage, blocked file pickers."
+      behavior:
+        - "Known environment errors become plain dialogs; unknown errors go to an error reporter with scrubbing."
+      ref_src: ["service/StudioService.ts:511-557", "errors/ENV-storage-quota-exceeded.md:1-8"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/EnvDialog.tsx"]
+        note: ""
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: preferences_page
+      we_call_it: "settings"
+      purpose: "Change app behavior without code."
+      behavior:
+        - "Generated from a typed schema with defaults and a labels table; groups visibility, timeline, appearance, time display, engine, pointer, editing, plugins, debug."
+      avoid: ["debug group in the same list as user settings"]
+      ref_src: ["studio core StudioSettings.ts:12-110", "ui/pages/PreferencesPageLabels.ts:1-30", "ui/PreferencePanel.tsx"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/SettingsMenu.tsx", "web/app/src/prefs.ts"]
+        note: "Theme and spacing in a popover."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U43
+      tag: borrow
+    - id: shortcut_remap
+      we_call_it: "shortcut settings"
+      purpose: "See and change key bindings."
+      behavior:
+        - "Contexts (global, clips, chords, notes, content editor, device panel, software MIDI, piano panel): the more local one wins when its element has focus. Only differences from defaults are stored; old snapshots migrate so a moved default is not mistaken for a choice."
+      ref_src: ["service/StudioShortcutManager.ts:33-42", "service/ShortcutStorage.ts:8-36", "ui/components/ShortcutManagerView.tsx"]
+      ours:
+        status: partial
+        files: ["web/app/src/input/keymap.ts", "web/app/src/ui/Help.tsx"]
+        note: "keymap.ts is the single source and feeds the help overlay; no remap."
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U43
+      tag: borrow
+    - id: help_overlay
+      we_call_it: "keys and help"
+      purpose: "One screen of gestures and keys."
+      behavior:
+        - "Reference keeps this in an external manual page which drifted from the app once (M mixer versus mute). Ours is generated from keymap data."
+      ref_src: ["manual keyboard-shortcuts.md:1-49", "manual mixer.md:15-18"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/Help.tsx"]
+        note: ""
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: start_sheet
+      we_call_it: "start sheet"
+      purpose: "First open: hear something, pick a goal, reopen a project."
+      behavior:
+        - "Reference first screen is a dense dashboard (four big actions, six tabs, many links). Ours is one primary action plus three goal cards."
+      avoid: ["a dashboard as the first thing a beginner sees"]
+      ref_src: ["ui/dashboard/ActionButtons.tsx:15-35", "ui/dashboard/Dashboard.tsx", "ui/dashboard/IntroTiles.tsx"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/Start.tsx", "web/app/src/templates/index.ts"]
+        note: ""
+      priority: P0
+      needs_command_api: "applyTemplate group."
+      ui_plan_task: U04
+      tag: rethink
+    - id: first_run_card_and_next_action
+      we_call_it: "first run card and next action chip"
+      purpose: "Tell a beginner the one next thing."
+      behavior:
+        - "Reference creates a one bar region on a new instrument and opens the editor (no empty moment)."
+      ref_src: ["ui/timeline/NewInstrumentRegion.ts", "studio core StudioSettings.ts:82"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/Start.tsx", "web/app/src/ui/NextAction.tsx"]
+        note: ""
+      priority: P0
+      needs_command_api: "none"
+      ui_plan_task: U04
+      tag: borrow
+    - id: guided_tour
+      we_call_it: "guided tour"
+      purpose: "Short card walk through the workspace."
+      behavior:
+        - "Offered by a non modal dialog with Not now, Start tour and Never show again, not while another dialog is open. 19 cards, two sentences each, a notch pointing at the target, arrows and Enter step, Escape closes, studio stays interactive, panels the tour opened are restored."
+        - "Reference has no way to restart after Never show (avoid)."
+      avoid: ["19 cards (use 8 or fewer)", "no restart"]
+      ref_src: ["ui/tour/TourSteps.ts:24-107", "plans/studio-tour.md:1-30"]
+      ours:
+        status: missing
+        files: []
+        note: "A first run card exists, no tour."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: null
+      proposed_task: U42
+      tag: borrow
+    - id: empty_states
+      we_call_it: "empty states with actions"
+      purpose: "Every empty area offers its next two actions."
+      behavior:
+        - "Timeline and device panel both show Add instrument and Add audio track."
+      ref_src: ["ui/browse/CreateTrackButtons.tsx:27-40", "ui/devices/panel/NoAudioUnitSelectedPlaceholder.tsx:15-18"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/EmptyState.tsx"]
+        note: ""
+      priority: P0
+      needs_command_api: "add_track."
+      ui_plan_task: U01
+      tag: borrow
+    - id: add_track_menu
+      we_call_it: "Add track"
+      purpose: "Add an instrument track or an audio track from the timeline."
+      behavior:
+        - "A plus button with a two item menu in the timeline header; new track goes below the track in edit mode."
+      ref_src: ["ui/timeline/TimelineHeader.tsx:29-43", "ui/browse/CreateTrackButtons.tsx:15-25"]
+      ours:
+        status: partial
+        files: ["web/app/src/ui/ArrangementPanel.tsx"]
+        note: "Add track exists, instrument kind only; audio track waits for T23. New track goes at the end, not below the selected one."
+      priority: P1
+      needs_command_api: "add_track, move_track (exist)."
+      ui_plan_task: U05
+      tag: borrow
+    - id: context_menu_kit
+      we_call_it: "context menu"
+      purpose: "Right click menus with shortcut text, nested items, disabled items with reasons."
+      behavior:
+        - "Menus on regions, notes, tracks, strips, devices, library rows and folders. Items carry shortcut text, can be checked, hidden, disabled, have separators, headers and runtime built submenus (such as 'Move to' lists). Action handlers re-check that targets still exist because an open menu outlives graph changes (undo, collaboration)."
+        - "Touch: a 500 ms long press with 10 px slop makes a context menu, because WebKit sends none."
+        - "Menu buttons in a group share an open state so moving across them switches menus."
+      ref_src: ["ui/components/Menu.tsx", "ui/components/MenuButton.tsx", "ui/TouchContextMenu.ts:4-50", "ui/timeline/tracks/audio-unit/headers/TrackHeaderMenu.ts:43-47"]
+      ours:
+        status: missing
+        files: []
+        note: "None in web/app/src."
+      priority: P1
+      needs_command_api: "none (items call existing Actions)."
+      ui_plan_task: null
+      proposed_task: U32
+      tag: borrow
+    - id: drag_and_drop_kit
+      we_call_it: "drag and drop"
+      purpose: "Move sounds, samples, files and clips between places with clear allowed or refused feedback."
+      behavior:
+        - "Payload is a small typed union: sample, soundfont, file, effect or instrument with ids, track. Each target declares what it accepts; enter and leave toggle an accept highlight; refusal shows no highlight. Hovering over a track header with a device payload can switch the edited track after a short delay (hover switch)."
+        - "Starting a drag stops audition. A drag of a selected row moves the whole selection."
+        - "Our rule P2: drops commit one group. Cancel by Escape."
+      ref_src: ["ui/AnyDragData.ts:6-30", "ui/DragAndDrop.ts", "ui/devices/DeviceDragging.ts:8-40", "ui/timeline/tracks/audio-unit/TimelineDragAndDrop.ts:41-122", "ui/timeline/tracks/audio-unit/headers/AudioUnitTrackHeader.tsx:134-176"]
+      ours:
+        status: missing
+        files: []
+        note: "No drag and drop or file drop handlers in web/app/src."
+      priority: P0
+      needs_command_api: "set_track_sound, add_track (exist)."
+      ui_plan_task: null
+      proposed_task: U32
+      tag: borrow
+    - id: pointer_drag_helper
+      we_call_it: "gesture helper"
+      purpose: "One drag protocol: update, commit, cancel, finally; Escape cancels; one undo step."
+      behavior:
+        - "Live updates apply unmarked; the undo mark happens on approve. Pointer capture; targets get a tab index so keys keep working after a drag."
+      ref_src: ["packages/lib/dom/src/dragging.ts:7-60"]
+      ours:
+        status: have
+        files: ["web/app/src/roll/RollController.ts", "web/app/src/roll/ArrangementController.ts"]
+        note: "Same pattern: preview locally, commit one group on release."
+      priority: P0
+      needs_command_api: "group (exists)."
+      ui_plan_task: U05
+      tag: borrow
+    - id: inline_value_input
+      we_call_it: "type a value"
+      purpose: "Click a number to type it (tempo, volume, bpm)."
+      behavior:
+        - "Number input with unit mapping, step and char limit."
+      ref_src: ["ui/components/NumberInput.tsx", "ui/components/TimeCodeInput.tsx"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/CommitText.tsx"]
+        note: "Used for project name and tempo."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: theme_and_density
+      we_call_it: "theme and spacing"
+      purpose: "Light, dark, system; comfortable and compact."
+      behavior:
+        - "Reference is dark only with schemes changing neutrals; labels are small. Ours has both themes and a density switch."
+      ref_src: ["plans/color-schemes.md:1-60"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/SettingsMenu.tsx", "web/app/src/index.css", "web/app/src/prefs.ts"]
+        note: ""
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U01
+      tag: rethink
+    - id: scrollbars_visible
+      we_call_it: "visible scrollbars"
+      purpose: "Show where you are in a long list or timeline."
+      behavior:
+        - "Reference hides native bars and draws custom ones where wired; missing wiring left users stuck."
+      ref_src: ["ui/components/Scrollbars.tsx", "studio scrollbars package Scrollbars.tsx:25-55", "issues/0185.md:12-20"]
+      ours:
+        status: have
+        files: ["web/app/src/ui/PianoRoll.tsx", "web/app/src/ui/ArrangementPanel.tsx"]
+        note: "Sidebar list must keep the native bar."
+      priority: P1
+      needs_command_api: "none"
+      ui_plan_task: U13
+      tag: rethink
+    - id: save_state_and_recovery
+      we_call_it: "autosave"
+      purpose: "Work survives reload."
+      behavior:
+        - "Footer shows when it last saved and warns on refusal."
+      ref_src: ["studio core project/Recovery.ts:16-40", "ui/Footer.tsx:52-77"]
+      ours:
+        status: have
+        files: ["web/app/src/persistence.ts", "web/app/src/ui/StatusBar.tsx"]
+        note: ""
+      priority: P0
+      needs_command_api: "none"
+      ui_plan_task: U15
+      tag: borrow
+    - id: project_notes
+      we_call_it: "project notes"
+      purpose: "A text pad inside the project (ideas, credits)."
+      behavior:
+        - "A panel that cannot be minimized, starts from a template text."
+      ref_src: ["ui/NotePadPanel.tsx", "ui/NotePadTemplate.md"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "Gap: a notes field in the project meta."
+      ui_plan_task: null
+      tag: borrow
+    - id: component_gallery
+      we_call_it: "component gallery page"
+      purpose: "A page that shows every UI component in every state so design review does not need a project."
+      behavior:
+        - "Reference ships Components, Colors, Icons and per device preview pages, and a performance page that renders each device offline and reports cost."
+      ref_src: ["ui/pages/ComponentsPage.tsx", "ui/pages/ColorsPage.tsx", "ui/pages/IconsPage.tsx", "ui/pages/PerformancePage.tsx"]
+      ours:
+        status: missing
+        files: []
+        note: ""
+      priority: P2
+      needs_command_api: "none"
+      ui_plan_task: null
+      tag: borrow
+
+# Reference parts deliberately left out (avoid for now). Not counted above.
+out_of_scope:
+  - id: live_rooms_chat_and_follow
+    why: "Collaboration brings conflict resolution work (the reference needed several fix rounds). Not a beginner goal."
+    ref_src: ["manual live-rooms.md:1-30", "ui/RoomStatus.tsx", "docs/live-collab-deterministic-reconcile.md"]
+    tag: avoid
+  - id: script_and_code_editors
+    why: "In app scripting devices (Apparat, Werkstatt, Spielwerk style) and a code editor add concepts and a security surface."
+    ref_src: ["ui/code-editor", "ui/devices/instruments/ApparatDeviceEditor.tsx", "ui/devices/ScriptDeviceEditor.tsx"]
+    tag: avoid
+  - id: shader_visualizer_and_media_publish
+    why: "Visual toys and publishing to a third party site; cover image and upload flows."
+    ref_src: ["ui/shadertoy", "ui/info-panel/UploadSoundCloud.ts"]
+    tag: avoid
+  - id: plugin_hosting_browser
+    why: "WebCLAP and soundfont scopes in the picker. Our plugin story is CLAP in a later Tauri shell and WebCLAP research (ref-webclap.yaml)."
+    ref_src: ["ui/browse/WclapBrowser.tsx", "ui/browse/SoundfontBrowser.tsx:1-84"]
+    tag: rethink
+  - id: sample_editor_and_chop
+    why: "Full sample editor page and auto chop into pads; revisit when audio import exists."
+    ref_src: ["ui/pages/SampleEditorPage.tsx", "ui/browse/SampleView.tsx:63-66"]
+    tag: rethink
+  - id: cloud_backup_and_drive_links
+    why: "Backup to Drive, Dropbox, Nextcloud. Nice later; the library work (D30) comes first."
+    ref_src: ["ui/dashboard/Backup.tsx:20-35", "service/StudioMenu.ts:108-136"]
+    tag: rethink
+  - id: dsp_stats_and_debug_pages
+    why: "Performance stats, box graph debug, errors and storage pages are developer tools. Keep a small perf readout behind the debug flag only."
+    ref_src: ["ui/header/PerformanceStats.tsx:38", "ui/pages/GraphPage.tsx", "ui/pages/ErrorsPage.tsx"]
+    tag: avoid
+
+unverified:
+  - "Whether our clips take their color from the track sound family (tokens exist, usage in ArrangementController not checked)."
+  - "What the arrangement double click creates exactly and where (a handler named onDouble exists, body not read)."
+  - "Whether U11 clipboard and U15 pieces beyond those present in the tree (Help, EnvDialog, keymap) are merged on other branches; status taken from this worktree only."
+  - "Reference marker lane details beyond the double click naming rule (MarkerTrackBody read only partly; line numbers from a concatenated listing, so the range 55-72 is approximate)."
+  - "Reference Menu.tsx and MenuButton.tsx internals (keyboard rules, nesting depth) were not read; the context menu kit behavior above comes from call sites."
+  - "Reference Spotlight, tour, analysis, modulation, dashboard and info panel were inventoried from file lists, R01 and manual pages, not read line by line."
+  - "Splice style features the owner likes (favorites, tags, key and tempo filters, loop preview synced to project tempo) are not in the reference at all; their design here is ours and untested with users."
+
+notes_for_engineers:
+  - "Do not open the reference while building. Everything needed for U31 to U36 is in the behavior fields above; ask the scout for a new entry if a detail is missing."
+  - "The sidebar must reuse SoundBrowser's catalogue logic (web/app/src/sounds/catalogue.ts: categories, browse, availability, licence line) rather than a second copy."
+  - "Every drop, menu item and button maps to an existing Actions method and so to a command; no UI only edits (CLAUDE.md hard constraint)."

@@ -1,0 +1,12 @@
+[
+  {
+    "command": "set_region_loop",
+    "loop_length": 15360,
+    "region": "00000000000000000000000000000101"
+  },
+  {
+    "command": "resize_region",
+    "length": 61440,
+    "region": "00000000000000000000000000000101"
+  }
+]

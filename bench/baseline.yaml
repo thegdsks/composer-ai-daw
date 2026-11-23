@@ -1,0 +1,122 @@
+# First baseline for bench/composer-bench. Replace by re-running the command below.
+machine:
+  cpu: Apple M4 Max, 14 cores
+  memory_gb: 36
+  os: Darwin 27.3.0
+  rustc: 1.100.0
+  load_average_during_run: "about 100 (shared with other agent builds), timings are noisy; scaling sweeps use best of 3"
+command: "cargo build --release -p composer-bench && target/release/composer-bench   # all env knobs default; see bench/budgets.env"
+peak_rss_bytes: 182484992   # /usr/bin/time -l with COMPOSER_BENCH_RENDER_SECONDS=60; the 300 s run was 164986880
+budgets_enforced: none   # set COMPOSER_BENCH_MAX_* to gate; see bench/budgets.env
+results:
+  apply:
+    tracks: 300
+    regions: 3000
+    notes: 150000
+    commands: 153300
+    total_ms: 41.5
+    ns_per_command: 271
+  undo_redo:
+    cycled_depth: 10000
+    undo_ns_per_step: 2825
+    redo_ns_per_step: 776
+    full_history_steps: 153300
+    full_undo_ns_per_step_first_decile: 198
+    full_undo_ns_per_step_last_decile: 8043
+    full_redo_ms: 19.0
+    hash_restored: true
+  state_hash_ms: 7.20
+  persist:
+    bytes: 19989360
+    save_ms: 68.8
+    load_ms: 314.8
+    peek_ms: 262.480
+    roundtrip_equal: true
+  render:
+    tracks: 32
+    notes: 19456
+    audio_seconds: 304.8
+    render_ms: 11744.7
+    rtf: 0.0385
+    sample_bytes: 117024000
+  scaling:
+    by_regions:
+      - { regions: 1000, lookup_ns: 50.9, add_note_ns: 336 }
+      - { regions: 4000, lookup_ns: 62.7, add_note_ns: 221 }
+      - { regions: 16000, lookup_ns: 73.3, add_note_ns: 216 }
+      - { regions: 64000, lookup_ns: 156.1, add_note_ns: 207 }
+    by_tracks:
+      - { tracks: 64, lookup_ns: 8.9, front_insert_or_delete_ns: 643 }
+      - { tracks: 256, lookup_ns: 8.9, front_insert_or_delete_ns: 2071 }
+      - { tracks: 1024, lookup_ns: 8.8, front_insert_or_delete_ns: 9146 }
+      - { tracks: 4000, lookup_ns: 10.3, front_insert_or_delete_ns: 36871 }
+    lookup_ratio_regions: 3.07
+    apply_ratio_regions: 0.62
+    lookup_ratio_tracks: 1.15
+    apply_ratio_tracks: 57.36
+risks:
+  - id: track_insert_delete_linear
+    evidence: "front insert plus delete costs 643 ns at 64 tracks and 36871 ns at 4000 (57x for 62x tracks), linear in track count"
+    likely_cause: "Project::renumber_from rewrites the track_pos index entry of every later track on each insert or remove (core/composer-model/src/project.rs)"
+    owner: core
+  - id: peek_not_cheap
+    evidence: "peek 262 ms vs full read_project 315 ms on a 20 MB file; peek should be near constant"
+    likely_cause: "peek appears to checksum or parse the whole proj section (core/composer-format/src/peek.rs)"
+    owner: core
+  - id: region_lookup_grows_with_size
+    evidence: "lookup 51 ns at 1000 regions, 156 ns at 64000 (3.07x); the id index is one HashMap so this looks like cache misses, not a scan"
+    likely_cause: "u128 Id keys in a std HashMap; watch it, no action yet"
+    owner: core
+  - id: render_cost
+    evidence: "300 s of 32 tracks renders in 11.7 s (rtf 0.04, 0.07 to 0.08 in noisier runs); a 1 hour project at this density is about 140 s"
+    likely_cause: "per block per track voice processing in composer-engine; fine now, track it as polyphony and plugin count grow"
+    owner: core
+  - id: undo_tail_noise
+    evidence: "last decile full undo 8043 ns per step vs 198 first decile in this run, 319 vs 215 in an earlier run"
+    likely_cause: "scheduler noise at load average 100; rerun on a quiet machine before treating as depth dependent cost"
+    owner: perf
+not_measured:
+  - audio dropouts (needs the realtime host, not in the workspace yet)
+  - UI frame time (app/ is another lane)
+  - plugin heavy projects (no plugin commands exist yet)
+  - peak memory per phase (only whole process RSS)
+after_t18:
+  note: "same command; load average was 237 during this run (baseline: about 100), so absolute numbers are noisy and slower for CPU bound phases. The two targeted rows are the comparison."
+  persist:
+    peek_ms: 0.003        # was 262.480; peek now reads manifest, meta and the first 4 KiB of proj only
+    peek_semantics: "no longer returns track, region or note counts; see ProjectInfo docs in core/composer-format/src/peek.rs"
+  scaling:
+    by_tracks:
+      - { tracks: 64, lookup_ns: 10.2, front_insert_or_delete_ns: 216 }      # was 643
+      - { tracks: 256, lookup_ns: 10.0, front_insert_or_delete_ns: 373 }     # was 2071
+      - { tracks: 1024, lookup_ns: 10.6, front_insert_or_delete_ns: 1229 }   # was 9146
+      - { tracks: 4000, lookup_ns: 13.3, front_insert_or_delete_ns: 5975 }   # was 36871
+    apply_ratio_tracks: 27.67   # was 57.36 for the same 62x size range
+  remaining: "front insert or delete is still sub linear but not flat: the Vec<Track> memmove (Project.tracks is pub) is the leftover linear part; the per track position rewrite is gone"
+audio_long_file:
+  command: "cargo build --release -p composer-bench --bin audio && target/release/audio   # env: COMPOSER_BENCH_AUDIO_SECONDS, COMPOSER_AUDIO_MAX_RESIDENT_BYTES, COMPOSER_BENCH_MAX_AUDIO_RTF, _PEAKS_MS, _RSS_BYTES"
+  note: "2 hours of 48 kHz stereo 16 bit generated in code and deleted after the run; one clip rendered through the streaming path (D42); same machine and load caveat as above"
+  file_bytes: 1382400044
+  frames: 345600000
+  import_ms: 14837.1   # hash and copy, bounded 1 MiB buffer
+  peaks_build_ms: 3971.5
+  peaks_cached_load_ms: 2.1
+  peaks_query_ms: 3.32
+  render_ms: 18069.3
+  render_rtf: 0.0025
+  decode_resident_high_water_bytes: 524288   # cap was 67108864
+  process_rss_high_water_bytes: 23724032   # sampled every 100 ms with ps; the file is 1.38 GB
+  suggested_budgets: "COMPOSER_BENCH_MAX_AUDIO_RTF=0.02 COMPOSER_BENCH_MAX_AUDIO_PEAKS_MS=30000 COMPOSER_BENCH_MAX_AUDIO_RSS_BYTES=134217728"
+edit_latency_t29:
+  command: "cargo build --release -p composer-bench --bin edit_latency && COMPOSER_BENCH_EDIT_OPS=1000 target/release/edit_latency   # env: COMPOSER_BENCH_EDIT_SIZES, _EDIT_OPS, budgets COMPOSER_BENCH_MAX_EDIT_MS, _MAX_EDIT_RATIO"
+  note: "median ms of one edit as the wasm editor serves it (state hash asked before, around and after the edit), native release, load average 27 to 45 so noisy; add_note is a random region, undo and redo follow it. execute_only is the command alone."
+  before_d45:   # full hash on every call, same command, ops 200
+    - { notes: 1000, add_note_ms: 0.1189, undo_ms: 0.1188, redo_ms: 0.1186 }
+    - { notes: 20000, add_note_ms: 2.1878, undo_ms: 2.1848, redo_ms: 2.1973 }
+    - { notes: 150000, add_note_ms: 44.6537, undo_ms: 49.2572, redo_ms: 49.1842 }
+  after_d45:    # segment table hash cache, ops 1000
+    - { notes: 1000, add_note_ms: 0.0057, undo_ms: 0.0025, redo_ms: 0.0024, execute_only_ms: 0.0004, first_edit_cold_ms: 0.9 }
+    - { notes: 20000, add_note_ms: 0.0357, undo_ms: 0.0066, redo_ms: 0.0064, execute_only_ms: 0.0008, first_edit_cold_ms: 8.0 }
+    - { notes: 150000, add_note_ms: 0.2725, undo_ms: 0.0454, redo_ms: 0.0426, execute_only_ms: 0.0012, first_edit_cold_ms: 38.9 }
+  suggested_budgets: "COMPOSER_BENCH_MAX_EDIT_MS=2   # largest size, any of add, undo, redo; about 7x headroom"
+  remaining: "the cost still rises slowly with the number of regions (the walk visits every region and note run, about 0.04 ms per 3000 regions) and the first edit after a load pays one time table builds (39 ms at 150000 notes)"

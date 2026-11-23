@@ -1,0 +1,11 @@
+[package]
+name = "composer-render"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[dependencies]
+composer-audio = { path = "../composer-audio" }
+composer-engine = { path = "../composer-engine" }
+composer-model = { path = "../composer-model" }

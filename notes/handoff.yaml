@@ -1,0 +1,47 @@
+# Handoff, frozen 2026-11-23 for the open source release. Older session instructions in the history of this file no longer apply.
+updated: 2026-11-23
+status: experimental
+release: "Released as is under AGPL-3.0-only (D2 accepted 2026-11-23). Not actively maintained. May be continued in the future. No support promise."
+product_name: "Composer AI DAW (crate, binary, npm package and env var names stay composer-*)"
+how_to_resume:
+  - "Read README.md, CLAUDE.md, this file, notes/tasks.yaml and notes/decisions.yaml. Do not reread notes/ref-*.yaml unless a task needs them."
+  - "Run the checks listed in CLAUDE.md to see the real state before changing anything."
+  - "Web app: cd web/app, npm install, npm run dev, open http://127.0.0.1:5173 in a Chromium based browser."
+  - "Pick a task from the list below, or define a new one in notes/tasks.yaml. Every decision that changes the command API needs an accepted entry in notes/decisions.yaml first."
+  - "The reference clones used for the ref notes are not in the repo. Paths in notes/ref-*.yaml are relative to a local checkout that is not published; the facts are recorded in the notes."
+state:
+  done: "All tasks in notes/tasks.yaml with status done, including the core, daemon, CLI, MCP server, web app M1 and the UI plan waves 1 to 3."
+  unfinished_not_planned_unless_the_project_resumes:
+    - "T15 beginner flow design (design only)"
+    - "T22 beginner start flow from the approved T15 design (a first version exists through templates and the start screen)"
+    - "T12b enforce bench budgets from a baseline taken on a quiet machine"
+    - "T24 CLAP plugin hosting through the daemon (native)"
+    - "T25 spatial audio research"
+    - "T26 web app accessibility and polish gaps"
+    - "U22b wire the store to the project mirror and drop the full refetch for large projects"
+  running: []
+verified_numbers:
+  checked_on: 2026-11-23
+  cargo_test_workspace: "450 tests passing"
+  web_app_tests: "372 passing, 1 skipped, 43 files"
+  pinned_demo_render_hash: "0x9234f99f24d6c39d (native equals node wasm)"
+  mcp: "tools verified against MCP spec 2025-11-25 (notes/ref-mcp-spec.yaml); the 2026-07-28 stateless revision is also implemented (T10c)"
+unverified:
+  - "Listening checks: nobody has judged the built-in voices, templates or generated music by ear"
+  - "Safari and Firefox (web/spike/SAFARI_CHECKLIST.yaml lists what to check)"
+  - "Screen reader support"
+  - "Real MIDI hardware"
+  - "Cross browser bit identical output (only Node tested)"
+  - "Sound catalogue licences were only partly read; re-read before bundling any pack (notes/dependency-licences.yaml)"
+not_built:
+  - "CLAP plugin hosting"
+  - "Browser playback of audio clips"
+  - "Sample pack (SF2, SFZ) loading in the browser"
+decisions:
+  D2: "accepted: AGPL-3.0-only, 2026-11-23"
+  open_or_proposed: "Other entries still marked proposed in notes/decisions.yaml are defaults to challenge, not facts."
+conventions:
+  - "No em or en dashes. Commit format <type>: <description>. No secrets in commits."
+  - "Durable notes are YAML in notes/. Findings go in issues or pull requests, not new markdown piles."
+  - "Merge conflicts in Cargo.lock: take either side, then cargo update --workspace."
+  - "Do not run two cargo jobs in one checkout at the same time."

@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["bench/*", "cli/*", "core/*", "daemon/*", "mcp/*"]
+
+[workspace.package]
+license = "AGPL-3.0-only"
+
+# Size optimised build for the browser module only (web/app/scripts/build-wasm.mjs).
+[profile.wasm-small]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

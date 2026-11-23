@@ -1,0 +1,18 @@
+[package]
+name = "composer-cli"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[lib]
+name = "composer_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "composer"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }

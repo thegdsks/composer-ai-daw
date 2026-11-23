@@ -1,0 +1,86 @@
+[
+  {
+    "command": "duplicate_region",
+    "new_region": "141141546c995564f3223146e2b3ae2d",
+    "note_ids": [
+      "2b8e0c2f939859d165bf0fc4aead3c7a",
+      "e7586d2e08231a5e974696adab2a0e11",
+      "9d94eac3434406f3aa491b1eaebeaa7c",
+      "0df3bb4f291430b6d64bfd1c04347714",
+      "fe77bd43b7e8af2b16e70c76e6e66a51",
+      "b3466f68e1b2f3c5a8b40dc34ec8ad77",
+      "6f4bdac6e31d4ceb6bc8b60b14a83067",
+      "c7f66a9a6925c15072e0e1baf4067528"
+    ],
+    "region": "00000000000000000000000000000201",
+    "start": 15360,
+    "track": null
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "9d94eac3434406f3aa491b1eaebeaa7c",
+    "region": "141141546c995564f3223146e2b3ae2d",
+    "velocity": 116
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "0df3bb4f291430b6d64bfd1c04347714",
+    "region": "141141546c995564f3223146e2b3ae2d",
+    "velocity": 109
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "6f4bdac6e31d4ceb6bc8b60b14a83067",
+    "region": "141141546c995564f3223146e2b3ae2d",
+    "velocity": 99
+  },
+  {
+    "command": "duplicate_region",
+    "new_region": "02720a894c9f3e764852c5a16cfd2079",
+    "note_ids": [
+      "9b2b36ebb9a9bec3e098b2a8e2fc7c6b",
+      "a49c2f5bf039b789c9aa53578f8327b1",
+      "0e6531c04d0564d0df2fd82cc974e6a2",
+      "5b7b321b74be6396c4234b9e72207909",
+      "1efdeb1b4f95067bb19da30266d441e3",
+      "3e84383f3c04a16556ba5d67cb89fd21",
+      "77c5fdb74217b9cd0990c29d37f5bbc9",
+      "4638be8f784d8600eaa499f3ad06ff0c"
+    ],
+    "region": "00000000000000000000000000000201",
+    "start": 30720,
+    "track": null
+  },
+  {
+    "command": "move_note",
+    "note": "a49c2f5bf039b789c9aa53578f8327b1",
+    "pitch": 72,
+    "region": "02720a894c9f3e764852c5a16cfd2079",
+    "start": 1920
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "0e6531c04d0564d0df2fd82cc974e6a2",
+    "region": "02720a894c9f3e764852c5a16cfd2079",
+    "velocity": 122
+  },
+  {
+    "command": "move_note",
+    "note": "0e6531c04d0564d0df2fd82cc974e6a2",
+    "pitch": 74,
+    "region": "02720a894c9f3e764852c5a16cfd2079",
+    "start": 3840
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "5b7b321b74be6396c4234b9e72207909",
+    "region": "02720a894c9f3e764852c5a16cfd2079",
+    "velocity": 119
+  },
+  {
+    "command": "set_note_velocity",
+    "note": "1efdeb1b4f95067bb19da30266d441e3",
+    "region": "02720a894c9f3e764852c5a16cfd2079",
+    "velocity": 103
+  }
+]

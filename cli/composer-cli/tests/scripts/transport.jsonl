@@ -1,0 +1,13 @@
+# D21 transport session state: set and read back, never touches the state hash or history.
+{"method":"session.new","params":{"name":"Transport","id":"000000000000000000000000000000f3"}}
+{"method":"state.hash","expect":{"state_hash":"@any"}}
+{"method":"transport.get","expect":{"playhead_tick":0,"playing":false,"loop":{"on":false,"start":0,"end":0},"metronome":{"on":false},"count_in_bars":0,"follow":true}}
+{"method":"transport.set","params":{"loop":{"on":true,"start":0,"end":7680},"metronome":{"on":true},"count_in_bars":2}}
+{"method":"transport.set","params":{"tick":960,"follow":false}}
+{"method":"transport.get","expect":{"playhead_tick":960,"loop":{"on":true,"start":0,"end":7680},"metronome":{"on":true},"count_in_bars":2,"follow":false}}
+{"method":"transport.set","params":{"loop":{"end":3840},"dry_run":true},"expect":{"dry_run":true,"loop":{"end":3840}}}
+{"method":"transport.get","expect":{"loop":{"end":7680}}}
+{"method":"transport.set","params":{"loop":{"start":8000}},"expect_error":{"data":{"code":"invalid"}}}
+{"method":"transport.set","params":{"count_in_bars":999},"expect_error":{"data":{"code":"invalid"}}}
+{"method":"transport.set","params":{},"expect_error":{"data":{"code":"invalid"}}}
+{"method":"undo","params":{"dry_run":true},"expect":{"undo_depth":0}}

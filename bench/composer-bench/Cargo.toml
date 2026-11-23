@@ -1,0 +1,14 @@
+[package]
+name = "composer-bench"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+description = "Stress project generator and scale benchmarks, driven only through the public command API."
+
+[dependencies]
+composer-audio = { path = "../../core/composer-audio" }
+composer-commands = { path = "../../core/composer-commands" }
+composer-format = { path = "../../core/composer-format" }
+composer-model = { path = "../../core/composer-model" }
+composer-render = { path = "../../core/composer-render" }

@@ -1,0 +1,120 @@
+[
+  {
+    "command": "add_track",
+    "id": "25491572b4e98dff41562ddf09666bb6",
+    "index": null,
+    "kind": "instrument",
+    "name": "Pad"
+  },
+  {
+    "command": "set_instrument",
+    "instrument": "00000000000000000000000000000001",
+    "track": "25491572b4e98dff41562ddf09666bb6"
+  },
+  {
+    "command": "set_track_sound",
+    "sound": "builtin-warm-pad",
+    "track": "25491572b4e98dff41562ddf09666bb6"
+  },
+  {
+    "command": "set_track_volume",
+    "track": "25491572b4e98dff41562ddf09666bb6",
+    "volume": 560
+  },
+  {
+    "command": "set_track_pan",
+    "pan": -80,
+    "track": "25491572b4e98dff41562ddf09666bb6"
+  },
+  {
+    "command": "add_region",
+    "id": "b470f0da4a4eb32f8fdc92d9d1ea2475",
+    "kind": "midi",
+    "length": 15360,
+    "start": 0,
+    "track": "25491572b4e98dff41562ddf09666bb6"
+  },
+  {
+    "command": "add_notes",
+    "notes": [
+      {
+        "duration": 7680,
+        "id": "f4a6df76e8c8e3f6d64aff214d70bbd6",
+        "pitch": 48,
+        "start": 0,
+        "velocity": 47
+      },
+      {
+        "duration": 7680,
+        "id": "a019a852ea950108d1f823d8d7ee3582",
+        "pitch": 52,
+        "start": 0,
+        "velocity": 47
+      },
+      {
+        "duration": 7680,
+        "id": "b926eb04814570127323ab97f2df5dab",
+        "pitch": 55,
+        "start": 0,
+        "velocity": 47
+      },
+      {
+        "duration": 3840,
+        "id": "209c5e8bb64123de34aad80f7b1fd8f5",
+        "pitch": 57,
+        "start": 7680,
+        "velocity": 52
+      },
+      {
+        "duration": 3840,
+        "id": "dfc4f73f88caca447244da5ba8b55439",
+        "pitch": 60,
+        "start": 7680,
+        "velocity": 52
+      },
+      {
+        "duration": 3840,
+        "id": "620c4086c9c57cb4fe5141202706f590",
+        "pitch": 64,
+        "start": 7680,
+        "velocity": 52
+      },
+      {
+        "duration": 3840,
+        "id": "73905b69f776b6d8fa3ce013bfb1af9c",
+        "pitch": 67,
+        "start": 7680,
+        "velocity": 52
+      },
+      {
+        "duration": 3840,
+        "id": "09f7ed7ecbc1ed50e038cdab29b87c1e",
+        "pitch": 59,
+        "start": 11520,
+        "velocity": 47
+      },
+      {
+        "duration": 3840,
+        "id": "dd9d38dbb85017ce386c5b02a31af322",
+        "pitch": 62,
+        "start": 11520,
+        "velocity": 47
+      },
+      {
+        "duration": 3840,
+        "id": "ad9093137851e054473dbf16c5d6c494",
+        "pitch": 65,
+        "start": 11520,
+        "velocity": 47
+      },
+      {
+        "duration": 3840,
+        "id": "0d552975fc4cb8b4496c253ab06d2bf0",
+        "pitch": 67,
+        "start": 11520,
+        "velocity": 47
+      }
+    ],
+    "region": "b470f0da4a4eb32f8fdc92d9d1ea2475"
+  }
+]

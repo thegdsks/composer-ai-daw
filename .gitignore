@@ -1,0 +1,11 @@
+target/
+node_modules/
+dist/
+.env*
+.DS_Store
+.claude/worktrees/
+web/spike/composer_wasm.wasm
+web/app/public/composer_wasm.wasm
+sounds/packs/
+web/app/public/sounds-packs
+.claude/

@@ -1,0 +1,11 @@
+[package]
+name = "composer-format"
+version = "0.0.0"
+edition = "2021"
+license.workspace = true
+publish = false
+
+[dependencies]
+composer-model = { path = "../composer-model" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
