@@ -1,9 +1,27 @@
 # Composer AI DAW
 
+![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue) ![Status: experimental](https://img.shields.io/badge/status-experimental-orange) ![Rust core and web app](https://img.shields.io/badge/built%20with-Rust%20%2B%20TypeScript-informational)
+
 A beginner-first, AI-drivable music composition app: a headless Rust core, a web app, a daemon, a CLI and an MCP server, all driven by one command API.
 
 > **Status: EXPERIMENTAL. Released as is.**
 > This project is not actively maintained and may be continued in the future. Expect rough edges. There is no support promise, no roadmap commitment and no promise to review issues or pull requests. It is published so that the code, the design notes and the ideas are available to anyone who finds them useful.
+
+## Screenshots
+
+The web app running in a Chromium based browser. The built-in voices are generated in code. The repository ships no audio files. The library list in these screenshots also shows one optional CC0 sample pack that was fetched locally with `sounds/fetch.sh`; without that step you only see the built-in voices.
+
+**Start screen.** One click plays a starter. You can also begin from a template, a blank project or a project file.
+
+![The start screen: play a starter, recreate a piece, a cinematic idea, a calm hour, or a blank project](docs/images/start.png)
+
+**Editor.** A track list and arrangement on top, a piano roll below, a sound library on the left. The cinematic template is loaded: strings, a low piano, a pulse and a deep boom.
+
+![The editor with the cinematic template: tracks and clips on top, piano roll below, sound library on the left](docs/images/editor.png)
+
+**Mixer.** A fader and a level meter for each track, plus master volume and reverb.
+
+![The mixer tab with four track faders, meters, mute and solo buttons, and master volume](docs/images/mixer.png)
 
 ## What it is
 
@@ -38,7 +56,7 @@ Stated plainly, so nobody is surprised:
 - Real MIDI hardware is untested.
 - Plugin hosting (CLAP) is not built.
 - Browser playback of audio clips is not built.
-- Loading sample packs (SF2, SFZ) in the browser is not built. The native render path can read them.
+- Loading your own sample files (SF2, SFZ) in the browser is not built. A few CC0 soundfont banks can be fetched with `sounds/fetch.sh` and are played in the browser, but they have not been listened to. The native render path can read SF2 and SFZ files.
 - The sound catalogue licences were only partly read. No third party audio is stored in this repository.
 
 ## Architecture
@@ -170,7 +188,7 @@ If the project resumes, the likely next items from `notes/tasks.yaml` are:
 
 - CLAP plugin hosting through the daemon.
 - Browser playback of audio clips.
-- Loading sample packs (SF2, SFZ) in the browser.
+- Loading your own sample files (SF2, SFZ) in the browser, and a listening pass over the bundled voices and the fetched banks.
 - A real listening and sound design pass over voices and templates.
 - An accessibility audit, including a screen reader pass.
 - Performance work on very large projects (the budgets in `bench/` are not enforced by default yet).
